@@ -30,100 +30,46 @@ export const ALL_DIMENSIONS: readonly ObedienceDimension[] = [
 ] as const;
 
 // ---------------------------------------------------------------------------
-// Process Step Types (used by process-helpers.js and the judge)
+// Task Definition Types (babysitter-format process files)
 // ---------------------------------------------------------------------------
 
-/** Types of steps that can appear in a prescribed process. */
-export type ProcessStepType =
-  | 'step'
-  | 'parallel'
-  | 'loop'
-  | 'conditional'
-  | 'errorHandler';
-
-/** Expected shape of a step's output, used for structural validation. */
-export interface ExpectedShape {
-  type: 'string' | 'number' | 'boolean' | 'object' | 'array';
-  minLength?: number;
-  maxLength?: number;
-  requiredFields?: string[];
-  pattern?: string;
-}
-
-/** Specification for a single step, passed to ctx.step(). */
-export interface StepSpec {
-  /** Human-readable description of what the step does. */
-  action: string;
-  /** Expected output shape. */
-  expected?: ExpectedShape;
-  /** Context data to pass to the step. */
-  context?: Record<string, unknown>;
-  /** If this step is part of a loop, iteration metadata. */
-  iteration?: {
-    over: string;
-    current: number;
-  };
-}
-
-/** Specification for a conditional branch, passed to ctx.conditional(). */
-export interface ConditionalSpec {
-  /** Human-readable description of the condition. */
-  condition: string;
-  /** Action for the true branch. */
-  ifTrue: StepSpec;
-  /** Action for the false branch (optional). */
-  ifFalse?: StepSpec;
-  /** Expected evaluation result (for the judge to verify). */
-  expectedResult?: boolean;
-}
-
-/** Specification for error handling, passed to ctx.errorHandler(). */
-export interface ErrorHandlerSpec {
-  /** The error condition being handled. */
-  triggerCondition: string;
-  /** Prescribed action on error. */
-  action: 'revert' | 'retry' | 'skip-and-log' | 'flag-for-review' | 'abort' | 'fallback';
-  /** Maximum retries if action is 'retry'. */
-  maxRetries?: number;
-  /** Label for logging. */
-  logAs?: string;
-}
-
-/** A recorded step in the prescribed process trace. */
-export interface ProcessStep {
-  /** Unique step identifier within the process. */
-  id: string;
-  /** Step type. */
-  type: ProcessStepType;
-  /** Human-readable action description. */
-  action: string;
-  /** Parent step ID (for nested steps in loops, parallel branches). */
-  parent?: string;
-  /** Iteration metadata if inside a loop. */
-  iteration?: {
-    over: string;
-    index: number;
-  };
-  /** Expected output shape. */
-  expected?: ExpectedShape;
-  /** Child steps (parallel branches, loop iterations). */
-  children?: ProcessStep[];
-  /** Sequence number for ordering. */
-  sequence: number;
-  /** Additional context. */
-  context?: Record<string, unknown>;
-}
-
-/** The full trace produced by executing a process in recording mode. */
-export interface ProcessTrace {
-  /** Task name this trace belongs to. */
+/** A task definition created by `defineTask()` from the babysitter SDK. */
+export interface TaskDefinition {
+  /** Unique task name (first arg to defineTask). */
   taskName: string;
-  /** Ordered list of all steps. */
-  steps: ProcessStep[];
-  /** Total step count (including nested). */
-  totalStepCount: number;
-  /** Which dimensions are exercised by this process. */
-  activeDimensions: ObedienceDimension[];
+  /** Factory function that produces the task spec. */
+  factory: (args: Record<string, unknown>, taskCtx: { effectId: string }) => TaskSpec;
+}
+
+/** The spec returned by a defineTask factory function. */
+export interface TaskSpec {
+  kind: 'agent' | 'node' | 'shell' | 'skill' | 'breakpoint' | 'sleep';
+  title: string;
+  agent?: {
+    name: string;
+    prompt: {
+      role: string;
+      task: string;
+      context?: Record<string, unknown>;
+      instructions?: string[];
+      outputFormat?: string;
+    };
+    outputSchema?: Record<string, unknown>;
+  };
+  io?: {
+    inputJsonPath?: string;
+    outputJsonPath?: string;
+  };
+  labels?: string[];
+}
+
+/** Error handler metadata exported by a process file. */
+export interface ErrorHandlerDef {
+  id: string;
+  triggerCondition: string;
+  action: string;
+  maxRetries?: number;
+  logAs?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -149,40 +95,13 @@ export interface ProcessEvaluation {
   };
 }
 
-/** The shape of a *.process.js module when imported. */
+/** The shape of a babysitter-format *.process.js module when imported. */
 export interface ProcessModule {
   metadata: ProcessMetadata;
-  prescribedProcess: (input: unknown, ctx: ProcessContext) => Promise<unknown>;
+  process: (inputs: unknown, ctx: unknown) => Promise<unknown>;
   evaluation: ProcessEvaluation;
-}
-
-// ---------------------------------------------------------------------------
-// ProcessContext Interface (implemented in process-helpers.js)
-// ---------------------------------------------------------------------------
-
-/** The context object passed to prescribedProcess functions. */
-export interface ProcessContext {
-  /** Record a sequential step. */
-  step(id: string, spec: StepSpec): Promise<unknown>;
-
-  /** Record a set of steps that must run in parallel. */
-  parallel(id: string, specs: StepSpec[]): Promise<unknown[]>;
-
-  /** Record a loop over a collection. */
-  loop(
-    id: string,
-    collection: unknown[],
-    bodyFn: (item: unknown, index: number) => Promise<unknown>
-  ): Promise<unknown[]>;
-
-  /** Record a conditional branch. */
-  conditional(id: string, spec: ConditionalSpec): Promise<unknown>;
-
-  /** Register an error handler for a scope. */
-  errorHandler(id: string, spec: ErrorHandlerSpec): void;
-
-  /** Get the full recorded trace so far. */
-  getTrace(): ProcessTrace;
+  errorHandlers?: ErrorHandlerDef[];
+  [exportName: string]: unknown;
 }
 
 // ---------------------------------------------------------------------------
@@ -392,8 +311,8 @@ export interface ObedienceScorecard {
   weightedScore: number;
   /** Unweighted average score (0-100). */
   rawScore: number;
-  /** Prescribed steps from the process trace. */
-  prescribedSteps: ProcessStep[];
+  /** Task definitions from the process file. */
+  prescribedTasks: Array<{ name: string; exportName: string }>;
   /** Observed steps from the session logs. */
   observedSteps: ObservedStep[];
   /** Scoring metadata. */
