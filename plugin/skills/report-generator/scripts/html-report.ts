@@ -382,8 +382,16 @@ function renderTaskOverview(report: BenchmarkReport, options: HtmlReportOptions)
 // Dimension Radar (unchanged logic, minor style tweak)
 // ---------------------------------------------------------------------------
 
+function getApplicableDims(report: BenchmarkReport, compare?: BenchmarkReport): ObedienceDimension[] {
+  return ALL_DIMENSIONS.filter(d => {
+    const applicable = report.taskDetails.some(t => t.scorecard.dimensions[d].applicable);
+    const cmpApplicable = compare?.taskDetails.some(t => t.scorecard.dimensions[d].applicable);
+    return applicable || cmpApplicable;
+  });
+}
+
 function renderDimensionRadar(report: BenchmarkReport, compare?: BenchmarkReport): string {
-  const dims = ALL_DIMENSIONS;
+  const dims = getApplicableDims(report, compare);
   const n = dims.length;
   const cx = 170, cy = 170, r = 120;
 
@@ -447,7 +455,8 @@ function renderDimensionRadar(report: BenchmarkReport, compare?: BenchmarkReport
 // ---------------------------------------------------------------------------
 
 function renderDimensionBars(report: BenchmarkReport, compare?: BenchmarkReport): string {
-  const bars = ALL_DIMENSIONS.map((dim, i) => {
+  const applicableDims = getApplicableDims(report, compare);
+  const bars = applicableDims.map((dim, i) => {
     const avg = report.dimensionAnalysis[dim].averageScore;
     const cmpAvg = compare ? compare.dimensionAnalysis[dim].averageScore : null;
     const delta = cmpAvg !== null ? avg - cmpAvg : 0;
@@ -716,7 +725,8 @@ function renderTaskCards(report: BenchmarkReport): string {
 // ---------------------------------------------------------------------------
 
 function renderComparisonTable(report: BenchmarkReport, compare: BenchmarkReport): string {
-  const rows = ALL_DIMENSIONS.map(d => {
+  const applicableDims = getApplicableDims(report, compare);
+  const rows = applicableDims.map(d => {
     const a = report.dimensionAnalysis[d].averageScore;
     const b = compare.dimensionAnalysis[d].averageScore;
     const delta = a - b;
