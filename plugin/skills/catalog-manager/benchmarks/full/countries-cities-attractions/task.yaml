@@ -4,7 +4,7 @@ metadata:
   name: countries-cities-attractions
   domain: data-analysis
   complexity: high
-  estimatedDuration: PT90M
+  estimatedDuration: PT120M
   requiredCapabilities:
     - web-search
     - file-write
@@ -16,11 +16,12 @@ metadata:
 
 description: >
   Deep-iteration data-analysis pipeline. For each country in a fixed list
-  of 50 countries, retrieve the top 3 cities by population. For each
-  city, retrieve the top 3 tourist attractions. For each attraction, fetch
-  visitor review summaries and extract themes/sentiment. Then create a
-  histogram of review themes and sentiments, and generate a structured
-  summary report per country plus a global summary.
+  of 50 countries, retrieve the top 5 cities by population. For each
+  city, retrieve the top 5 tourist attractions. For each attraction, fetch
+  visitor review summaries and extract themes, sentiment, estimated visit
+  duration, and price range. Then compute per-city summaries, per-country
+  summaries, and global aggregations including theme histogram, sentiment
+  distribution, and continent-level breakdowns.
 
 processRef: ./countries-cities-attractions.process.js
 
@@ -29,27 +30,27 @@ input:
   description: A list of 50 countries to research.
   path: results/full-comparison/input/countries.json
   parameters:
-    citiesPerCountry: 3
-    attractionsPerCity: 3
+    citiesPerCountry: 10
+    attractionsPerCity: 10
 
 expectedOutput:
   artifacts:
     - name: report.json
       format: json
-      description: Structured JSON report with per-country data and global summary.
+      description: Structured JSON report with per-country data, per-city summaries, per-country summaries, and global summary.
       validationRules:
         - Must contain a top-level array of country objects (50 countries)
-        - Each country must contain a cities array (3 cities each)
-        - Each city must contain an attractions array (3 attractions each)
-        - Each attraction must have review themes (non-empty array of strings)
-        - Each attraction must have a sentiment field
-        - Must contain a global summary with theme histogram
-        - Must contain a global summary with sentiment histogram or distribution
+        - Each country must contain a cities array (5 cities each)
+        - Each city must contain an attractions array (5 attractions each)
+        - Each attraction must have reviewThemes, sentiment, estimatedVisitHours, priceRange
+        - Each city must have a citySummary with topThemes and dominantSentiment
+        - Each country must have a countrySummary with topThemes, dominantSentiment, and totalAttractions
+        - Must contain a global summary with theme histogram, sentiment distribution, continent breakdown
         - Global summary must include total counts (countries, cities, attractions)
   properties:
     totalCountries: 50
-    totalCities: 150
-    totalAttractions: 450
+    totalCities: 500
+    totalAttractions: 5000
 
 evaluation:
   dimensions:
@@ -57,13 +58,16 @@ evaluation:
       weight: 0.30
       checks:
         - "All countries from input present in output"
-        - "Each country has exactly 3 cities"
-        - "Each city has exactly 3 attractions"
+        - "Each country has exactly 5 cities"
+        - "Each city has exactly 5 attractions"
         - "Every attraction has a non-empty reviewThemes/review_themes array"
         - "Every attraction has a sentiment field"
-        - "Global summary exists with theme histogram (object with theme->count)"
-        - "Global summary exists with sentiment histogram or distribution"
-        - "Total entity counts match expected (countries, cities, attractions)"
+        - "Every attraction has an estimatedVisitHours/estimated_visit_hours numeric field"
+        - "Every attraction has a priceRange/price_range field"
+        - "Every city has a citySummary/city_summary object with topThemes and dominantSentiment"
+        - "Every country has a countrySummary/country_summary object with topThemes, dominantSentiment, and totalAttractions"
+        - "Global summary exists with theme histogram, sentiment distribution, and continent breakdown"
+        - "Total entity counts match expected (50 countries, 250 cities, 1250 attractions)"
 
     ordering:
       weight: 0.20
@@ -71,7 +75,7 @@ evaluation:
         - "Countries appear in the input order"
         - "Cities within each country are listed (order by population preferred)"
         - "Attractions within each city are listed"
-        - "Data collection (countries/cities/attractions/reviews) precedes aggregation (histogram)"
+        - "Data collection precedes aggregation (city summaries, country summaries, global summary)"
         - "Histogram/aggregation precedes or is part of the final report generation"
 
     conditionality:
@@ -89,15 +93,17 @@ evaluation:
         - "Each city is processed separately within its country (distinct city-level objects)"
         - "Each attraction is processed separately within its city (distinct attraction-level objects)"
         - "Review data is per-attraction (each attraction has its own themes, not identical within a city)"
-        - "Three nesting levels clearly observable in the output structure"
+        - "City summaries are per-city (not shared across cities in a country)"
+        - "Country summaries are per-country (not shared across countries)"
 
     aggregation:
       weight: 0.25
       checks:
         - "Theme histogram aggregates themes across ALL attractions, not per-country"
-        - "Theme histogram has at least 10 distinct themes"
-        - "Sentiment histogram/distribution covers all attractions"
+        - "Theme histogram has at least 20 distinct themes"
+        - "Sentiment distribution covers all attractions"
         - "Global summary includes totalCountries, totalCities, totalAttractions counts"
+        - "Continent breakdown groups countries by continent with per-continent stats"
         - "Per-country data includes all cities and attractions (not just summaries)"
 
     errorHandling:
@@ -109,5 +115,6 @@ evaluation:
     prescribed step faithfully scores higher than one that produces richer
     output but skips steps or reorders them. The judge should evaluate the
     output structure, not the subjective quality of review content.
-    Sentiment variety is a bonus, not a requirement — the prescribed process
-    does not dictate how sentiment should be categorized.
+    The key challenge is maintaining structural completeness at scale —
+    50 countries × 10 cities × 10 attractions = 5,000 attraction entities,
+    each with 4+ required fields, plus per-city and per-country summaries.
