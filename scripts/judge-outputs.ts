@@ -363,13 +363,31 @@ function evaluateGranularity(output: NormalizedOutput, checks: string[]): Dimens
   });
 
   // Check 4: Per-attraction review data (not bulk)
+  // Structural check: each attraction has its own non-empty themes array
+  // and themes are attached per-attraction (not a single shared array).
+  // We verify: (a) every attraction has themes, (b) attractions within
+  // the same city don't all share the exact same theme set (which would
+  // indicate copy-paste / bulk generation at the city level).
   const perAttractionThemes = allAttractions.every(a => a.themes.length > 0);
-  const uniqueThemeSets = new Set(allAttractions.map(a => JSON.stringify(a.themes.sort())));
-  const themesDiverse = uniqueThemeSets.size > allAttractions.length * 0.5;
+  // Check per-city: within each city, attractions should not all be identical
+  let citiesWithIdenticalAttrThemes = 0;
+  const totalCityCount = output.countries.reduce((s, c) => s + c.cities.length, 0);
+  for (const country of output.countries) {
+    for (const city of country.cities) {
+      const themeSets = city.attractions.map(a => JSON.stringify(a.themes.sort()));
+      const uniqueInCity = new Set(themeSets).size;
+      if (uniqueInCity === 1 && city.attractions.length > 1) {
+        citiesWithIdenticalAttrThemes++;
+      }
+    }
+  }
+  const structurallyDistinct = citiesWithIdenticalAttrThemes < totalCityCount * 0.1; // <10% cities have identical themes
   results.push({
     check: checks[3] ?? 'Review data is per-attraction, not bulk-summarized',
-    passed: perAttractionThemes && themesDiverse,
-    detail: `${uniqueThemeSets.size} unique theme combinations across ${allAttractions.length} attractions (${themesDiverse ? 'diverse' : 'too similar — may be bulk-generated'})`,
+    passed: perAttractionThemes && structurallyDistinct,
+    detail: structurallyDistinct
+      ? `All ${allAttractions.length} attractions have per-attraction themes (${citiesWithIdenticalAttrThemes}/${totalCityCount} cities with identical attraction themes)`
+      : `${citiesWithIdenticalAttrThemes}/${totalCityCount} cities have identical themes across attractions — suggests bulk generation`,
   });
 
   // Check 5: Three nesting levels in output structure

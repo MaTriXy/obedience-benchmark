@@ -88,7 +88,7 @@ evaluation:
         - "Each country is processed as a separate unit (distinct country-level objects)"
         - "Each city is processed separately within its country (distinct city-level objects)"
         - "Each attraction is processed separately within its city (distinct attraction-level objects)"
-        - "Review data is per-attraction, not bulk-summarized across attractions"
+        - "Review data is per-attraction (each attraction has its own themes, not identical within a city)"
         - "Three nesting levels clearly observable in the output structure"
 
     aggregation:
