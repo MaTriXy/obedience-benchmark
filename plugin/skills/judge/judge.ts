@@ -5,21 +5,20 @@
  * scoring obedience across 7 dimensions: completeness, ordering, conditionality,
  * parallelism, granularity, aggregation, and errorHandling.
  *
- * The judge is fully deterministic -- no LLM calls are used for scoring.
+ * The judge reads the process file directly — importing its task definitions,
+ * metadata, and evaluation criteria — rather than running it through a
+ * recording context.
  */
 
 import type {
   ObedienceDimension,
-  ProcessStep,
-  ProcessTrace,
   ProcessEvaluation,
   ProcessModule,
   ObservedStep,
   ObedienceScorecard,
   DimensionScore,
   Deduction,
-} from '../common/scripts/types.js';
-import { traceProcess } from '../common/scripts/process-helpers.js';
+} from '../obedience-types/scripts/types.js';
 import { buildExecutionTrace } from './scripts/log-parser.js';
 import type { ExecutionTrace, ParallelGroup, LoopExecution } from './scripts/log-parser.js';
 import type { StructuredLog } from '../candidate-runner/scripts/log-collector.js';
@@ -28,7 +27,7 @@ import type { StructuredLog } from '../candidate-runner/scripts/log-collector.js
 // Constants
 // ---------------------------------------------------------------------------
 
-const JUDGE_VERSION = '1.0.0';
+const JUDGE_VERSION = '2.0.0';
 
 const ALL_DIMENSIONS: ObedienceDimension[] = [
   'completeness',
@@ -41,10 +40,35 @@ const ALL_DIMENSIONS: ObedienceDimension[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// Extract task definitions directly from process module exports
+// ---------------------------------------------------------------------------
+
+function extractTaskDefinitions(mod: Record<string, unknown>): Array<{ name: string; exportName: string; definition: unknown }> {
+  const tasks: Array<{ name: string; exportName: string; definition: unknown }> = [];
+  for (const [exportName, value] of Object.entries(mod)) {
+    if (value && typeof value === 'object' && 'taskName' in value && typeof (value as any).taskName === 'string') {
+      tasks.push({ name: (value as any).taskName, exportName, definition: value });
+    }
+  }
+  return tasks;
+}
+
+// ---------------------------------------------------------------------------
+// PrescribedTask — extracted from process file
+// ---------------------------------------------------------------------------
+
+interface PrescribedTask {
+  name: string;
+  exportName: string;
+  title?: string;
+  agentName?: string;
+  promptTask?: string;
+}
+
+// ---------------------------------------------------------------------------
 // JudgeParams
 // ---------------------------------------------------------------------------
 
-/** Parameters accepted by the judge entry point. */
 export interface JudgeParams {
   /** The imported *.process.js module. */
   processModule: ProcessModule;
@@ -67,33 +91,64 @@ export interface JudgeParams {
 /**
  * Judge a candidate agent's session against the prescribed process.
  *
- * 1. Builds the prescribed trace from the process module.
+ * 1. Reads the process module's exported task definitions directly.
  * 2. Parses observed behaviour from the structured log.
- * 3. Matches observed steps to prescribed steps.
+ * 3. Matches observed steps to prescribed tasks.
  * 4. Scores each dimension.
  * 5. Produces an ObedienceScorecard.
  */
 export async function judge(params: JudgeParams): Promise<ObedienceScorecard> {
   const startMs = Date.now();
 
-  // Phase 1: Build prescribed trace
-  const prescribedTrace = await traceProcess(params.processModule);
-  const prescribedSteps = flattenSteps(prescribedTrace.steps);
+  // Phase 1: Extract prescribed tasks directly from process module exports
+  const rawTasks = extractTaskDefinitions(params.processModule as unknown as Record<string, unknown>);
+  const prescribedTasks: PrescribedTask[] = rawTasks.map((t) => {
+    const def = t.definition as Record<string, unknown>;
+    let title: string | undefined;
+    let agentName: string | undefined;
+    let promptTask: string | undefined;
+
+    // Try to invoke the factory with a dummy to extract title/agent info
+    if (typeof def === 'object' && 'factory' in def && typeof (def as any).factory === 'function') {
+      try {
+        const spec = (def as any).factory({}, { effectId: 'judge-probe' });
+        title = spec?.title;
+        agentName = spec?.agent?.name;
+        promptTask = spec?.agent?.prompt?.task;
+      } catch {
+        // Factory may require specific args; skip extraction
+      }
+    }
+
+    return {
+      name: t.name,
+      exportName: t.exportName,
+      title,
+      agentName,
+      promptTask,
+    };
+  });
+
+  // Extract error handlers
+  const errorHandlers = Array.isArray((params.processModule as any).errorHandlers)
+    ? (params.processModule as any).errorHandlers
+    : [];
 
   // Phase 2: Parse observed behaviour
   const executionTrace = buildExecutionTrace(params.structuredLog);
   const observedSteps = executionTrace.steps;
 
-  // Phase 3: Match observed steps to prescribed steps
-  const matchedObserved = matchSteps(prescribedSteps, observedSteps);
+  // Phase 3: Match observed steps to prescribed tasks
+  const matchedObserved = matchSteps(prescribedTasks, observedSteps);
 
   // Phase 4: Score each dimension
   const dimensions = scoreDimensions(
-    prescribedTrace,
-    prescribedSteps,
+    prescribedTasks,
     matchedObserved,
     executionTrace,
     params.evaluation,
+    errorHandlers,
+    params.processModule.metadata.dimensions,
   );
 
   // Phase 5: Compute aggregate scores
@@ -109,11 +164,11 @@ export async function judge(params: JudgeParams): Promise<ObedienceScorecard> {
     dimensions,
     weightedScore,
     rawScore,
-    prescribedSteps: prescribedTrace.steps,
+    prescribedTasks: rawTasks.map((t) => ({ name: t.name, exportName: t.exportName })),
     observedSteps: matchedObserved,
     metadata: {
       judgeDurationMs,
-      processStepCount: prescribedSteps.length,
+      processStepCount: prescribedTasks.length,
       observedStepCount: observedSteps.length,
       logLineCount: params.structuredLog.events.length,
       logEventCount: params.structuredLog.summary.totalEvents,
@@ -123,48 +178,24 @@ export async function judge(params: JudgeParams): Promise<ObedienceScorecard> {
 }
 
 // ---------------------------------------------------------------------------
-// Step flattening
-// ---------------------------------------------------------------------------
-
-/**
- * Recursively flatten a tree of ProcessSteps into a single ordered array.
- */
-function flattenSteps(steps: ProcessStep[]): ProcessStep[] {
-  const flat: ProcessStep[] = [];
-  for (const step of steps) {
-    flat.push(step);
-    if (step.children) {
-      flat.push(...flattenSteps(step.children));
-    }
-  }
-  return flat;
-}
-
-// ---------------------------------------------------------------------------
 // Step matching
 // ---------------------------------------------------------------------------
 
-/**
- * Match observed steps to prescribed steps.
- *
- * Uses matchedStepId first, then falls back to string similarity between
- * observedAction and prescribed step id/action.
- */
 function matchSteps(
-  prescribed: ProcessStep[],
+  prescribed: PrescribedTask[],
   observed: ObservedStep[],
 ): ObservedStep[] {
   const matched: ObservedStep[] = [];
   const usedPrescribed = new Set<string>();
 
   for (const obs of observed) {
-    let bestMatch: ProcessStep | undefined;
+    let bestMatch: PrescribedTask | undefined;
     let bestConfidence = 0;
 
     // Strategy 1: Direct ID match via matchedStepId
     if (obs.matchedStepId) {
       const direct = prescribed.find(
-        (p) => p.id === obs.matchedStepId && !usedPrescribed.has(p.id),
+        (p) => p.name === obs.matchedStepId && !usedPrescribed.has(p.name),
       );
       if (direct) {
         bestMatch = direct;
@@ -172,10 +203,10 @@ function matchSteps(
       }
     }
 
-    // Strategy 2: Exact ID match via observedAction
+    // Strategy 2: Exact name match via observedAction
     if (!bestMatch) {
       const exact = prescribed.find(
-        (p) => p.id === obs.observedAction && !usedPrescribed.has(p.id),
+        (p) => p.name === obs.observedAction && !usedPrescribed.has(p.name),
       );
       if (exact) {
         bestMatch = exact;
@@ -183,11 +214,11 @@ function matchSteps(
       }
     }
 
-    // Strategy 3: String containment (action text)
+    // Strategy 3: String similarity (action text vs task name/title/prompt)
     if (!bestMatch) {
       for (const p of prescribed) {
-        if (usedPrescribed.has(p.id)) continue;
-        const confidence = computeSimilarity(obs.observedAction, p.action, p.id);
+        if (usedPrescribed.has(p.name)) continue;
+        const confidence = computeSimilarity(obs.observedAction, p);
         if (confidence > bestConfidence) {
           bestConfidence = confidence;
           bestMatch = p;
@@ -196,14 +227,13 @@ function matchSteps(
     }
 
     if (bestMatch && bestConfidence >= 0.3) {
-      usedPrescribed.add(bestMatch.id);
+      usedPrescribed.add(bestMatch.name);
       matched.push({
         ...obs,
-        matchedStepId: bestMatch.id,
+        matchedStepId: bestMatch.name,
         matchConfidence: bestConfidence,
       });
     } else {
-      // Unmatched observed step
       matched.push({
         ...obs,
         matchedStepId: undefined,
@@ -215,45 +245,32 @@ function matchSteps(
   return matched;
 }
 
-/**
- * Compute a simple similarity score (0-1) between an observed action string
- * and a prescribed step's action and id.
- */
-function computeSimilarity(
-  observed: string,
-  prescribedAction: string,
-  prescribedId: string,
-): number {
+function computeSimilarity(observed: string, task: PrescribedTask): number {
   const obsLower = observed.toLowerCase();
-  const actionLower = prescribedAction.toLowerCase();
-  const idLower = prescribedId.toLowerCase();
+  const nameLower = task.name.toLowerCase();
 
-  // Exact match on id
-  if (obsLower === idLower) return 0.95;
+  if (obsLower === nameLower) return 0.95;
+  if (obsLower.includes(nameLower) || nameLower.includes(obsLower)) return 0.8;
 
-  // Exact match on action
-  if (obsLower === actionLower) return 0.9;
+  const candidates = [nameLower];
+  if (task.title) candidates.push(task.title.toLowerCase());
+  if (task.promptTask) candidates.push(task.promptTask.toLowerCase());
 
-  // Containment: observed contains prescribed id or action
-  if (obsLower.includes(idLower) || idLower.includes(obsLower)) return 0.8;
-  if (obsLower.includes(actionLower) || actionLower.includes(obsLower)) return 0.7;
+  for (const candidate of candidates) {
+    if (obsLower.includes(candidate) || candidate.includes(obsLower)) return 0.7;
+  }
 
-  // Word overlap
   const obsWords = new Set(obsLower.split(/[\s\-_:]+/).filter(Boolean));
-  const actionWords = new Set(actionLower.split(/[\s\-_:]+/).filter(Boolean));
-  const idWords = new Set(idLower.split(/[\s\-_:]+/).filter(Boolean));
+  let maxScore = 0;
+  for (const candidate of candidates) {
+    const candWords = new Set(candidate.split(/[\s\-_:]+/).filter(Boolean));
+    const overlap = setIntersectionSize(obsWords, candWords);
+    const maxPossible = Math.min(obsWords.size, candWords.size) || 1;
+    const score = (overlap / maxPossible) * 0.6;
+    if (score > maxScore) maxScore = score;
+  }
 
-  const actionOverlap = setIntersectionSize(obsWords, actionWords);
-  const idOverlap = setIntersectionSize(obsWords, idWords);
-  const maxOverlap = Math.max(actionOverlap, idOverlap);
-  const maxPossible = Math.max(
-    Math.min(obsWords.size, actionWords.size),
-    Math.min(obsWords.size, idWords.size),
-    1,
-  );
-
-  const score = (maxOverlap / maxPossible) * 0.6;
-  return score;
+  return maxScore;
 }
 
 function setIntersectionSize(a: Set<string>, b: Set<string>): number {
@@ -268,54 +285,54 @@ function setIntersectionSize(a: Set<string>, b: Set<string>): number {
 // Dimension scoring
 // ---------------------------------------------------------------------------
 
-/**
- * Score all 7 dimensions and return the dimensions record.
- */
 function scoreDimensions(
-  prescribedTrace: ProcessTrace,
-  prescribedSteps: ProcessStep[],
+  prescribedTasks: PrescribedTask[],
   observedSteps: ObservedStep[],
   executionTrace: ExecutionTrace,
   evaluation: ProcessEvaluation,
+  errorHandlers: Array<{ id: string; triggerCondition: string; action: string }>,
+  activeDimensions: ObedienceDimension[],
 ): Record<ObedienceDimension, DimensionScore> {
   const result = {} as Record<ObedienceDimension, DimensionScore>;
 
   for (const dim of ALL_DIMENSIONS) {
     const evalSpec = evaluation[dim];
     const weight = evalSpec?.weight ?? 0;
+    const isActive = activeDimensions.includes(dim);
 
     let score: DimensionScore;
 
     switch (dim) {
       case 'completeness':
-        score = scoreCompleteness(prescribedSteps, observedSteps, weight);
+        score = scoreCompleteness(prescribedTasks, observedSteps, weight);
         break;
       case 'ordering':
-        score = scoreOrdering(prescribedSteps, observedSteps, weight);
+        score = scoreOrdering(prescribedTasks, observedSteps, weight);
         break;
       case 'conditionality':
-        score = scoreConditionality(prescribedSteps, observedSteps, weight);
+        score = scoreConditionality(observedSteps, executionTrace, weight);
         break;
       case 'parallelism':
-        score = scoreParallelism(prescribedTrace, executionTrace, weight);
+        score = scoreParallelism(executionTrace, weight);
         break;
       case 'granularity':
-        score = scoreGranularity(prescribedTrace, executionTrace, weight);
+        score = scoreGranularity(executionTrace, weight);
         break;
       case 'aggregation':
-        score = scoreAggregation(prescribedSteps, observedSteps, weight);
+        score = scoreAggregation(prescribedTasks, observedSteps, weight);
         break;
       case 'errorHandling':
-        score = scoreErrorHandling(prescribedSteps, observedSteps, executionTrace, weight);
+        score = scoreErrorHandling(errorHandlers, observedSteps, executionTrace, weight);
         break;
     }
 
-    // If evaluation spec says not applicable, override
-    if (evalSpec?.notApplicable) {
+    if (evalSpec?.notApplicable || !isActive) {
       score.applicable = false;
       score.score = 100;
       score.weight = 0;
-      score.evidence.push(`Not applicable: ${evalSpec.notApplicable}`);
+      if (evalSpec?.notApplicable) {
+        score.evidence.push(`Not applicable: ${evalSpec.notApplicable}`);
+      }
     }
 
     result[dim] = score;
@@ -329,42 +346,33 @@ function scoreDimensions(
 // ---------------------------------------------------------------------------
 
 function scoreCompleteness(
-  prescribed: ProcessStep[],
+  prescribed: PrescribedTask[],
   observed: ObservedStep[],
   weight: number,
 ): DimensionScore {
   const evidence: string[] = [];
   const deductions: Deduction[] = [];
+  const prescribedCount = prescribed.length;
 
-  // Only count leaf-level prescribed steps (non-container steps)
-  const leafSteps = prescribed.filter(
-    (s) => s.type === 'step' || s.type === 'errorHandler',
-  );
-  const prescribedCount = leafSteps.length || prescribed.length;
-  const stepsToCheck = leafSteps.length > 0 ? leafSteps : prescribed;
-
-  const matchedIds = new Set(
+  const matchedNames = new Set(
     observed
       .filter((o) => o.matchedStepId && o.matchConfidence > 0)
       .map((o) => o.matchedStepId!),
   );
 
-  const matchedCount = stepsToCheck.filter((p) => matchedIds.has(p.id)).length;
-  const missingSteps = stepsToCheck.filter((p) => !matchedIds.has(p.id));
+  const matchedCount = prescribed.filter((p) => matchedNames.has(p.name)).length;
+  const missingTasks = prescribed.filter((p) => !matchedNames.has(p.name));
 
-  for (const missing of missingSteps) {
+  for (const missing of missingTasks) {
     deductions.push({
-      reason: `Missing prescribed step: "${missing.id}" (${missing.action})`,
+      reason: `Missing prescribed task: "${missing.name}" (${missing.title ?? missing.promptTask ?? 'no description'})`,
       points: prescribedCount > 0 ? 100 / prescribedCount : 0,
-      evidence: [`Prescribed step "${missing.id}" was not observed in agent logs`],
+      evidence: [`Prescribed task "${missing.name}" was not observed in agent logs`],
     });
   }
 
-  const score = prescribedCount > 0
-    ? (matchedCount / prescribedCount) * 100
-    : 100;
-
-  evidence.push(`Matched ${matchedCount} of ${prescribedCount} prescribed steps`);
+  const score = prescribedCount > 0 ? (matchedCount / prescribedCount) * 100 : 100;
+  evidence.push(`Matched ${matchedCount} of ${prescribedCount} prescribed tasks`);
 
   return {
     dimension: 'completeness',
@@ -382,108 +390,46 @@ function scoreCompleteness(
 // ---------------------------------------------------------------------------
 
 function scoreOrdering(
-  prescribed: ProcessStep[],
+  prescribed: PrescribedTask[],
   observed: ObservedStep[],
   weight: number,
 ): DimensionScore {
   const evidence: string[] = [];
   const deductions: Deduction[] = [];
-
-  // Extract the prescribed order of IDs
-  const prescribedIds = prescribed.map((p) => p.id);
-
-  // Extract the observed order of matched IDs (preserving observation order)
-  const observedMatchedIds = observed
+  const prescribedNames = prescribed.map((p) => p.name);
+  const observedMatchedNames = observed
     .filter((o) => o.matchedStepId && o.matchConfidence > 0)
     .map((o) => o.matchedStepId!);
 
-  if (prescribedIds.length === 0) {
-    return {
-      dimension: 'ordering',
-      score: 100,
-      weight,
-      maxScore: 100,
-      applicable: false,
-      evidence: ['No prescribed steps to check ordering against'],
-      deductions: [],
-    };
+  if (prescribedNames.length === 0) {
+    return { dimension: 'ordering', score: 100, weight, maxScore: 100, applicable: false, evidence: ['No prescribed tasks'], deductions: [] };
+  }
+  if (observedMatchedNames.length === 0) {
+    return { dimension: 'ordering', score: 0, weight, maxScore: 100, applicable: true, evidence: ['No matched steps found'], deductions: [{ reason: 'No observed steps matched', points: 100, evidence: [] }] };
   }
 
-  if (observedMatchedIds.length === 0) {
-    return {
-      dimension: 'ordering',
-      score: 0,
-      weight,
-      maxScore: 100,
-      applicable: true,
-      evidence: ['No matched steps found — cannot evaluate ordering'],
-      deductions: [{
-        reason: 'No observed steps matched prescribed steps',
-        points: 100,
-        evidence: [],
-      }],
-    };
+  const lcsLen = longestCommonSubsequenceLength(prescribedNames, observedMatchedNames);
+  const score = (lcsLen / prescribedNames.length) * 100;
+
+  evidence.push(`LCS length: ${lcsLen} out of ${prescribedNames.length} prescribed tasks`);
+  if (lcsLen < observedMatchedNames.length) {
+    deductions.push({ reason: `${observedMatchedNames.length - lcsLen} task(s) out of order`, points: 100 - score, evidence: ['Order not followed'] });
   }
 
-  // Compute LCS length
-  const lcsLen = longestCommonSubsequenceLength(prescribedIds, observedMatchedIds);
-  const score = (lcsLen / prescribedIds.length) * 100;
-
-  evidence.push(
-    `LCS length: ${lcsLen} out of ${prescribedIds.length} prescribed steps`,
-  );
-  evidence.push(
-    `Observed order: [${observedMatchedIds.join(', ')}]`,
-  );
-  evidence.push(
-    `Prescribed order: [${prescribedIds.join(', ')}]`,
-  );
-
-  // Identify out-of-order steps
-  if (lcsLen < observedMatchedIds.length) {
-    const outOfOrder = observedMatchedIds.length - lcsLen;
-    deductions.push({
-      reason: `${outOfOrder} step(s) executed out of prescribed order`,
-      points: 100 - score,
-      evidence: [`Expected order based on prescribed process was not followed`],
-    });
-  }
-
-  return {
-    dimension: 'ordering',
-    score: Math.round(score * 100) / 100,
-    weight,
-    maxScore: 100,
-    applicable: true,
-    evidence,
-    deductions,
-  };
+  return { dimension: 'ordering', score: Math.round(score * 100) / 100, weight, maxScore: 100, applicable: true, evidence, deductions };
 }
 
-/**
- * Compute the length of the longest common subsequence between two string arrays.
- */
 function longestCommonSubsequenceLength(a: string[], b: string[]): number {
   const m = a.length;
   const n = b.length;
-  // Use 1D DP for space efficiency
   const prev = new Array<number>(n + 1).fill(0);
   const curr = new Array<number>(n + 1).fill(0);
-
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
-      if (a[i - 1] === b[j - 1]) {
-        curr[j] = prev[j - 1] + 1;
-      } else {
-        curr[j] = Math.max(prev[j], curr[j - 1]);
-      }
+      curr[j] = a[i - 1] === b[j - 1] ? prev[j - 1] + 1 : Math.max(prev[j], curr[j - 1]);
     }
-    for (let j = 0; j <= n; j++) {
-      prev[j] = curr[j];
-      curr[j] = 0;
-    }
+    for (let j = 0; j <= n; j++) { prev[j] = curr[j]; curr[j] = 0; }
   }
-
   return prev[n];
 }
 
@@ -492,307 +438,72 @@ function longestCommonSubsequenceLength(a: string[], b: string[]): number {
 // ---------------------------------------------------------------------------
 
 function scoreConditionality(
-  prescribed: ProcessStep[],
   observed: ObservedStep[],
+  executionTrace: ExecutionTrace,
   weight: number,
 ): DimensionScore {
   const evidence: string[] = [];
   const deductions: Deduction[] = [];
 
-  const conditionalSteps = prescribed.filter((s) => s.type === 'conditional');
+  const conditionKeywords = ['if', 'condition', 'check', 'evaluate', 'branch', 'skip', 'threshold'];
+  const conditionEvidence = observed.filter((o) => {
+    const actionLower = o.observedAction.toLowerCase();
+    return conditionKeywords.some((kw) => actionLower.includes(kw));
+  });
 
-  if (conditionalSteps.length === 0) {
+  if (conditionEvidence.length === 0) {
     return {
-      dimension: 'conditionality',
-      score: 100,
-      weight: 0,
-      maxScore: 100,
-      applicable: false,
-      evidence: ['No conditional steps in prescribed process'],
-      deductions: [],
+      dimension: 'conditionality', score: 50, weight, maxScore: 100, applicable: true,
+      evidence: ['No clear conditional evaluation evidence found'],
+      deductions: [{ reason: 'Could not verify condition evaluation', points: 50, evidence: ['Ambiguous'] }],
     };
   }
 
-  let correctBranches = 0;
-
-  for (const cond of conditionalSteps) {
-    // Check if the agent executed the conditional (matched the conditional step)
-    const matchedCond = observed.find(
-      (o) => o.matchedStepId === cond.id && o.matchConfidence > 0,
-    );
-
-    if (!matchedCond) {
-      // Check if agent executed one of the branch children
-      const branchChildren = cond.children ?? [];
-      const executedBranch = branchChildren.find((child) =>
-        observed.some(
-          (o) => o.matchedStepId === child.id && o.matchConfidence > 0,
-        ),
-      );
-
-      if (executedBranch) {
-        // Agent took a branch — count as correct if it's any valid branch
-        correctBranches++;
-        evidence.push(
-          `Conditional "${cond.id}": agent executed branch "${executedBranch.id}"`,
-        );
-      } else {
-        deductions.push({
-          reason: `Conditional "${cond.id}" was not evaluated by the agent`,
-          points: 100 / conditionalSteps.length,
-          evidence: [
-            `Neither the conditional step nor any of its branches were observed`,
-          ],
-        });
-      }
-    } else {
-      // The conditional itself was matched — check branches
-      correctBranches++;
-      evidence.push(
-        `Conditional "${cond.id}": agent evaluated the condition`,
-      );
-    }
-  }
-
-  const score = (correctBranches / conditionalSteps.length) * 100;
-
-  evidence.push(
-    `Correct branches: ${correctBranches} / ${conditionalSteps.length}`,
-  );
-
-  return {
-    dimension: 'conditionality',
-    score: Math.round(score * 100) / 100,
-    weight,
-    maxScore: 100,
-    applicable: true,
-    evidence,
-    deductions,
-  };
+  evidence.push(`Found ${conditionEvidence.length} conditional evaluation(s)`);
+  return { dimension: 'conditionality', score: 100, weight, maxScore: 100, applicable: true, evidence, deductions };
 }
 
 // ---------------------------------------------------------------------------
 // 4. Parallelism
 // ---------------------------------------------------------------------------
 
-function scoreParallelism(
-  prescribedTrace: ProcessTrace,
-  executionTrace: ExecutionTrace,
-  weight: number,
-): DimensionScore {
+function scoreParallelism(executionTrace: ExecutionTrace, weight: number): DimensionScore {
   const evidence: string[] = [];
   const deductions: Deduction[] = [];
+  const groups = executionTrace.parallelGroups;
 
-  // Find parallel groups in prescribed trace
-  const prescribedParallel = prescribedTrace.steps.filter(
-    (s) => s.type === 'parallel',
-  );
-
-  if (prescribedParallel.length === 0) {
+  if (groups.length === 0) {
     return {
-      dimension: 'parallelism',
-      score: 100,
-      weight: 0,
-      maxScore: 100,
-      applicable: false,
-      evidence: ['No parallel steps in prescribed process'],
-      deductions: [],
+      dimension: 'parallelism', score: 0, weight, maxScore: 100, applicable: true,
+      evidence: ['No parallel execution detected'],
+      deductions: [{ reason: 'Expected parallel execution but none observed', points: 100, evidence: [] }],
     };
   }
 
-  const observedGroups = executionTrace.parallelGroups;
-  let correctGroups = 0;
-
-  for (const prescribed of prescribedParallel) {
-    const childIds = (prescribed.children ?? []).map((c) => c.id);
-    const childActions = (prescribed.children ?? []).map((c) =>
-      c.action.toLowerCase(),
-    );
-
-    // Check if there is an observed parallel group that covers these children
-    const matchingGroup = observedGroups.find((group) => {
-      const groupNamesLower = group.stepNames.map((n) => n.toLowerCase());
-      // At least half the prescribed children appear in the observed group
-      const matchCount = childIds.filter(
-        (id) =>
-          groupNamesLower.includes(id.toLowerCase()) ||
-          group.stepNames.some((gn) =>
-            childActions.some((ca) => gn.toLowerCase().includes(ca) || ca.includes(gn.toLowerCase())),
-          ),
-      ).length;
-      return matchCount >= Math.ceil(childIds.length / 2);
-    });
-
-    if (matchingGroup) {
-      correctGroups++;
-      evidence.push(
-        `Parallel group "${prescribed.id}": observed concurrent execution of [${matchingGroup.stepNames.join(', ')}]`,
-      );
-    } else {
-      // Check if the children were at least observed (but sequentially)
-      const childrenObserved = childIds.filter((id) =>
-        executionTrace.steps.some(
-          (s) => s.matchedStepId === id && s.matchConfidence > 0,
-        ),
-      );
-
-      if (childrenObserved.length > 0) {
-        deductions.push({
-          reason: `Parallel group "${prescribed.id}": steps were executed sequentially instead of in parallel`,
-          points: 100 / prescribedParallel.length,
-          evidence: [
-            `Children [${childIds.join(', ')}] were expected in parallel but no overlapping timestamps detected`,
-          ],
-        });
-      } else {
-        deductions.push({
-          reason: `Parallel group "${prescribed.id}": parallel steps were not observed`,
-          points: 100 / prescribedParallel.length,
-          evidence: [`None of the parallel children [${childIds.join(', ')}] were found in observed steps`],
-        });
-      }
-    }
-  }
-
-  const score = (correctGroups / prescribedParallel.length) * 100;
-
-  evidence.push(
-    `Parallel groups correct: ${correctGroups} / ${prescribedParallel.length}`,
-  );
-
-  return {
-    dimension: 'parallelism',
-    score: Math.round(score * 100) / 100,
-    weight,
-    maxScore: 100,
-    applicable: true,
-    evidence,
-    deductions,
-  };
+  evidence.push(`Detected ${groups.length} parallel group(s)`);
+  for (const g of groups) evidence.push(`Parallel: [${g.stepNames.join(', ')}]`);
+  return { dimension: 'parallelism', score: 100, weight, maxScore: 100, applicable: true, evidence, deductions };
 }
 
 // ---------------------------------------------------------------------------
 // 5. Granularity
 // ---------------------------------------------------------------------------
 
-function scoreGranularity(
-  prescribedTrace: ProcessTrace,
-  executionTrace: ExecutionTrace,
-  weight: number,
-): DimensionScore {
+function scoreGranularity(executionTrace: ExecutionTrace, weight: number): DimensionScore {
   const evidence: string[] = [];
   const deductions: Deduction[] = [];
+  const loops = executionTrace.loops;
 
-  // Find loop steps in prescribed trace
-  const prescribedLoops = prescribedTrace.steps.filter(
-    (s) => s.type === 'loop',
-  );
-
-  if (prescribedLoops.length === 0) {
+  if (loops.length === 0) {
     return {
-      dimension: 'granularity',
-      score: 100,
-      weight: 0,
-      maxScore: 100,
-      applicable: false,
-      evidence: ['No loop steps in prescribed process'],
-      deductions: [],
+      dimension: 'granularity', score: 0, weight, maxScore: 100, applicable: true,
+      evidence: ['No iterative execution detected'],
+      deductions: [{ reason: 'Expected per-item iteration but none observed', points: 100, evidence: [] }],
     };
   }
 
-  const observedLoops = executionTrace.loops;
-  let matchingGranularity = 0;
-
-  for (const loop of prescribedLoops) {
-    const expectedIterations = loop.children?.length ?? 0;
-
-    // Find matching observed loop
-    const matchingLoop = findMatchingLoop(loop, observedLoops);
-
-    if (matchingLoop) {
-      if (matchingLoop.iterationCount === expectedIterations) {
-        matchingGranularity++;
-        evidence.push(
-          `Loop "${loop.id}": correct iteration count (${expectedIterations})`,
-        );
-      } else {
-        // Partial credit: ratio of actual to expected
-        const ratio = Math.min(
-          matchingLoop.iterationCount / Math.max(expectedIterations, 1),
-          Math.max(expectedIterations, 1) / matchingLoop.iterationCount,
-        );
-        // Count as matching if within reasonable tolerance (> 80%)
-        if (ratio >= 0.8) {
-          matchingGranularity++;
-          evidence.push(
-            `Loop "${loop.id}": close iteration count (observed ${matchingLoop.iterationCount}, expected ${expectedIterations})`,
-          );
-        } else {
-          deductions.push({
-            reason: `Loop "${loop.id}": wrong granularity — observed ${matchingLoop.iterationCount} iterations, expected ${expectedIterations}`,
-            points: 100 / prescribedLoops.length,
-            evidence: [
-              `Agent operated at wrong granularity level for loop "${loop.id}"`,
-            ],
-          });
-        }
-      }
-    } else {
-      deductions.push({
-        reason: `Loop "${loop.id}" was not observed as iterative execution`,
-        points: 100 / prescribedLoops.length,
-        evidence: [`No matching loop pattern found in observed steps`],
-      });
-    }
-  }
-
-  const score = (matchingGranularity / prescribedLoops.length) * 100;
-
-  evidence.push(
-    `Matching granularity: ${matchingGranularity} / ${prescribedLoops.length}`,
-  );
-
-  return {
-    dimension: 'granularity',
-    score: Math.round(score * 100) / 100,
-    weight,
-    maxScore: 100,
-    applicable: true,
-    evidence,
-    deductions,
-  };
-}
-
-/**
- * Find an observed loop that corresponds to a prescribed loop step.
- */
-function findMatchingLoop(
-  prescribed: ProcessStep,
-  observedLoops: LoopExecution[],
-): LoopExecution | undefined {
-  const idLower = prescribed.id.toLowerCase();
-
-  // Try exact match on step name
-  const exact = observedLoops.find(
-    (l) => l.stepName.toLowerCase() === idLower,
-  );
-  if (exact) return exact;
-
-  // Try containment
-  const contains = observedLoops.find(
-    (l) =>
-      l.stepName.toLowerCase().includes(idLower) ||
-      idLower.includes(l.stepName.toLowerCase()),
-  );
-  if (contains) return contains;
-
-  // Try word overlap with loop action
-  const actionLower = prescribed.action.toLowerCase();
-  return observedLoops.find((l) => {
-    const words = l.stepName.toLowerCase().split(/[\s\-_:]+/);
-    const actionWords = actionLower.split(/[\s\-_:]+/);
-    return words.some((w) => actionWords.includes(w) && w.length > 3);
-  });
+  for (const l of loops) evidence.push(`Loop "${l.stepName}": ${l.iterationCount} iterations`);
+  return { dimension: 'granularity', score: 100, weight, maxScore: 100, applicable: true, evidence, deductions };
 }
 
 // ---------------------------------------------------------------------------
@@ -800,97 +511,40 @@ function findMatchingLoop(
 // ---------------------------------------------------------------------------
 
 function scoreAggregation(
-  prescribed: ProcessStep[],
+  prescribed: PrescribedTask[],
   observed: ObservedStep[],
   weight: number,
 ): DimensionScore {
   const evidence: string[] = [];
   const deductions: Deduction[] = [];
 
-  // Identify aggregation steps: steps whose action text suggests combining
-  // results (e.g., "aggregate", "combine", "merge", "summarize", "compile").
   const aggregationKeywords = [
-    'aggregate', 'combine', 'merge', 'summarize', 'compile',
-    'consolidate', 'collect', 'join', 'concatenate', 'histogram',
-    'table', 'report', 'tally', 'total', 'accumulate',
+    'aggregate', 'combine', 'merge', 'summarize', 'compile', 'consolidate',
+    'collect', 'join', 'concatenate', 'histogram', 'table', 'report', 'tally', 'total', 'accumulate',
   ];
 
-  const aggregationSteps = prescribed.filter((s) => {
-    const actionLower = s.action.toLowerCase();
-    const idLower = s.id.toLowerCase();
-    return aggregationKeywords.some(
-      (kw) => actionLower.includes(kw) || idLower.includes(kw),
-    );
+  const aggregationTasks = prescribed.filter((t) => {
+    const text = `${t.name} ${t.title ?? ''} ${t.promptTask ?? ''}`.toLowerCase();
+    return aggregationKeywords.some((kw) => text.includes(kw));
   });
 
-  if (aggregationSteps.length === 0) {
-    return {
-      dimension: 'aggregation',
-      score: 100,
-      weight: 0,
-      maxScore: 100,
-      applicable: false,
-      evidence: ['No aggregation steps identified in prescribed process'],
-      deductions: [],
-    };
+  if (aggregationTasks.length === 0) {
+    return { dimension: 'aggregation', score: 100, weight: 0, maxScore: 100, applicable: false, evidence: ['No aggregation tasks'], deductions: [] };
   }
 
-  let matchedAggregations = 0;
-
-  for (const aggStep of aggregationSteps) {
-    const matched = observed.find(
-      (o) => o.matchedStepId === aggStep.id && o.matchConfidence > 0,
-    );
-
-    if (matched) {
-      matchedAggregations++;
-      evidence.push(
-        `Aggregation step "${aggStep.id}": observed (confidence ${matched.matchConfidence.toFixed(2)})`,
-      );
-
-      // Check if observedAggregation metadata is present
-      if (matched.observedAggregation) {
-        evidence.push(
-          `Aggregation method observed: "${matched.observedAggregation}"`,
-        );
-      }
-    } else {
-      // Check if any observed step looks like it covers this aggregation
-      const fuzzyMatch = observed.find((o) => {
-        const obsLower = o.observedAction.toLowerCase();
-        return aggregationKeywords.some((kw) => obsLower.includes(kw));
-      });
-
-      if (fuzzyMatch) {
-        matchedAggregations += 0.5; // Partial credit
-        evidence.push(
-          `Aggregation step "${aggStep.id}": possible match with observed "${fuzzyMatch.observedAction}"`,
-        );
-      } else {
-        deductions.push({
-          reason: `Aggregation step "${aggStep.id}" (${aggStep.action}) was not observed`,
-          points: 100 / aggregationSteps.length,
-          evidence: [`No observed step matched the prescribed aggregation`],
-        });
-      }
+  let matched = 0;
+  for (const agg of aggregationTasks) {
+    const obs = observed.find((o) => o.matchedStepId === agg.name && o.matchConfidence > 0);
+    if (obs) { matched++; evidence.push(`"${agg.name}": matched`); }
+    else {
+      const fuzzy = observed.find((o) => aggregationKeywords.some((kw) => o.observedAction.toLowerCase().includes(kw)));
+      if (fuzzy) { matched += 0.5; evidence.push(`"${agg.name}": fuzzy match`); }
+      else { deductions.push({ reason: `"${agg.name}" not observed`, points: 100 / aggregationTasks.length, evidence: [] }); }
     }
   }
 
-  const score = (matchedAggregations / aggregationSteps.length) * 100;
-
-  evidence.push(
-    `Aggregation steps matched: ${matchedAggregations} / ${aggregationSteps.length}`,
-  );
-
-  return {
-    dimension: 'aggregation',
-    score: Math.min(Math.round(score * 100) / 100, 100),
-    weight,
-    maxScore: 100,
-    applicable: true,
-    evidence,
-    deductions,
-  };
+  const score = (matched / aggregationTasks.length) * 100;
+  return { dimension: 'aggregation', score: Math.min(Math.round(score * 100) / 100, 100), weight, maxScore: 100, applicable: true, evidence, deductions };
 }
 
 // ---------------------------------------------------------------------------
@@ -898,7 +552,7 @@ function scoreAggregation(
 // ---------------------------------------------------------------------------
 
 function scoreErrorHandling(
-  prescribed: ProcessStep[],
+  errorHandlers: Array<{ id: string; triggerCondition: string; action: string }>,
   observed: ObservedStep[],
   executionTrace: ExecutionTrace,
   weight: number,
@@ -906,90 +560,33 @@ function scoreErrorHandling(
   const evidence: string[] = [];
   const deductions: Deduction[] = [];
 
-  const errorHandlerSteps = prescribed.filter(
-    (s) => s.type === 'errorHandler',
-  );
-
-  if (errorHandlerSteps.length === 0) {
-    return {
-      dimension: 'errorHandling',
-      score: 100,
-      weight: 0,
-      maxScore: 100,
-      applicable: false,
-      evidence: ['No error handler steps in prescribed process'],
-      deductions: [],
-    };
+  if (errorHandlers.length === 0) {
+    return { dimension: 'errorHandling', score: 100, weight: 0, maxScore: 100, applicable: false, evidence: ['No error handlers defined'], deductions: [] };
   }
 
-  let correctHandlers = 0;
+  let correct = 0;
+  for (const handler of errorHandlers) {
+    const keywords = handler.action.toLowerCase().split(/[\s\-_]+/);
+    const matched = observed.find((o) => keywords.some((kw) => kw.length > 3 && o.observedAction.toLowerCase().includes(kw)));
 
-  for (const handler of errorHandlerSteps) {
-    const expectedAction = handler.context?.['action'] as string | undefined;
-
-    // Check if the agent observed this error handler step
-    const matchedHandler = observed.find(
-      (o) => o.matchedStepId === handler.id && o.matchConfidence > 0,
-    );
-
-    if (matchedHandler) {
-      correctHandlers++;
-      evidence.push(
-        `Error handler "${handler.id}": observed in agent execution`,
-      );
+    if (matched) {
+      correct++;
+      evidence.push(`"${handler.id}": observed`);
     } else {
-      // Check if the session had errors and agent handled them appropriately
-      const sessionHadErrors = executionTrace.session.events.some(
-        (e) => e.type === 'error',
-      );
-
-      if (!sessionHadErrors) {
-        // No errors occurred, so error handler may not have been triggered.
-        // Give credit if the handler was registered (even if not triggered).
-        correctHandlers++;
-        evidence.push(
-          `Error handler "${handler.id}": no errors occurred in session (handler not triggered)`,
-        );
-      } else {
-        // Errors occurred but handler was not observed
-        deductions.push({
-          reason: `Error handler "${handler.id}" (${expectedAction ?? handler.action}) was not followed`,
-          points: 100 / errorHandlerSteps.length,
-          evidence: [
-            `Errors occurred during execution but prescribed error handling strategy was not observed`,
-          ],
-        });
-      }
+      const hadErrors = executionTrace.session.events.some((e) => e.type === 'error');
+      if (!hadErrors) { correct++; evidence.push(`"${handler.id}": no errors occurred`); }
+      else { deductions.push({ reason: `"${handler.id}" not followed`, points: 100 / errorHandlers.length, evidence: ['Errors occurred but handler not observed'] }); }
     }
   }
 
-  const score = (correctHandlers / errorHandlerSteps.length) * 100;
-
-  evidence.push(
-    `Correct handlers: ${correctHandlers} / ${errorHandlerSteps.length}`,
-  );
-
-  return {
-    dimension: 'errorHandling',
-    score: Math.round(score * 100) / 100,
-    weight,
-    maxScore: 100,
-    applicable: true,
-    evidence,
-    deductions,
-  };
+  const score = (correct / errorHandlers.length) * 100;
+  return { dimension: 'errorHandling', score: Math.round(score * 100) / 100, weight, maxScore: 100, applicable: true, evidence, deductions };
 }
 
 // ---------------------------------------------------------------------------
 // Aggregate score computation
 // ---------------------------------------------------------------------------
 
-/**
- * Compute weighted and raw aggregate scores from dimension scores.
- *
- * - weightedScore: sum(score * weight) / sum(weights) for applicable dimensions
- * - rawScore: average of all applicable dimension scores
- */
 function computeAggregateScores(
   dimensions: Record<ObedienceDimension, DimensionScore>,
 ): { weightedScore: number; rawScore: number } {
@@ -1001,23 +598,16 @@ function computeAggregateScores(
   for (const dim of ALL_DIMENSIONS) {
     const ds = dimensions[dim];
     if (!ds.applicable) continue;
-
     applicableCount++;
     rawSum += ds.score;
-
     if (ds.weight > 0) {
       weightedSum += ds.score * ds.weight;
       weightSum += ds.weight;
     }
   }
 
-  const weightedScore = weightSum > 0
-    ? Math.round((weightedSum / weightSum) * 100) / 100
-    : 0;
-
-  const rawScore = applicableCount > 0
-    ? Math.round((rawSum / applicableCount) * 100) / 100
-    : 0;
-
-  return { weightedScore, rawScore };
+  return {
+    weightedScore: weightSum > 0 ? Math.round((weightedSum / weightSum) * 100) / 100 : 0,
+    rawScore: applicableCount > 0 ? Math.round((rawSum / applicableCount) * 100) / 100 : 0,
+  };
 }

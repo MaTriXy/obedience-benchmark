@@ -19,7 +19,7 @@ import {
   resetSchemaCache,
 } from './catalog.js';
 
-import type { CatalogEntry, CatalogFilter, ObedienceDimension } from '../common/scripts/types.js';
+import type { CatalogEntry, CatalogFilter, ObedienceDimension } from '../obedience-types/scripts/types.js';
 
 // ---------------------------------------------------------------------------
 // Helpers — temporary task fixtures
@@ -27,7 +27,7 @@ import type { CatalogEntry, CatalogFilter, ObedienceDimension } from '../common/
 
 const SCHEMA_PATH = path.resolve(
   path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')),
-  '../common/scripts/schemas/task-definition.schema.json',
+  '../obedience-types/scripts/schemas/task-definition.schema.json',
 );
 
 /** Create a temporary task directory with valid metadata and process file. */
@@ -86,7 +86,7 @@ function createTempTask(
   const processFileName = `${name}.process.js`;
   fs.writeFileSync(
     path.join(taskDir, processFileName),
-    `export const metadata = { name: "${name}" };\nexport async function prescribedProcess() {}\nexport const evaluation = {};\n`,
+    `export const metadata = { name: "${name}" };\nexport async function process() {}\nexport const evaluation = {};\n`,
     'utf-8',
   );
 

@@ -13,9 +13,9 @@
  *   {{ESTIMATED_DURATION}} - ISO 8601 duration (e.g. PT1H)
  */
 
-// @ts-check
+import { defineTask } from '@a5c-ai/babysitter-sdk';
 
-/** @type {import('../../common/scripts/types.js').ProcessMetadata} */
+/** @type {import('../../obedience-types/scripts/types.js').ProcessMetadata} */
 export const metadata = {
   name: '{{TASK_NAME}}',
   domain: '{{DOMAIN}}',
@@ -25,64 +25,136 @@ export const metadata = {
   tags: ['map-reduce', 'parallel', '{{DOMAIN}}'],
 };
 
-/**
- * Prescribed process: map-reduce pipeline.
- *
- * {{DESCRIPTION}}
- *
- * @param {unknown} input - Task input data
- * @param {import('../../common/scripts/types.js').ProcessContext} ctx - Process context
- * @returns {Promise<unknown>}
- */
-export async function prescribedProcess(input, ctx) {
-  // Error handler: retry transient failures up to 2 times
-  ctx.errorHandler('err-transient', {
+export const errorHandlers = [
+  {
+    id: 'err-transient',
     triggerCondition: 'A parallel branch fails with a transient error',
     action: 'retry',
     maxRetries: 2,
     logAs: 'transient-branch-failure',
-  });
+  },
+];
 
-  // Step 1: Analyze input and determine how to split
-  const analysis = await ctx.step('analyze-input', {
-    action: 'Analyze the input and determine how to partition it into chunks',
-    expected: { type: 'object', requiredFields: ['chunks', 'chunkCount'] },
-  });
+export const analyzeInputTask = defineTask('analyze-input', (args, taskCtx) => ({
+  kind: 'agent',
+  title: 'Analyze input for chunking',
+  agent: {
+    name: 'chunk-analyzer',
+    prompt: {
+      role: 'Data analyst',
+      task: 'Analyze the input and determine how to partition it into chunks',
+      context: args,
+      instructions: ['Examine data structure', 'Determine chunk boundaries', 'Count chunks'],
+      outputFormat: 'JSON',
+    },
+    outputSchema: { type: 'object', required: ['chunks', 'chunkCount'] },
+  },
+  io: {
+    inputJsonPath: `tasks/${taskCtx.effectId}/input.json`,
+    outputJsonPath: `tasks/${taskCtx.effectId}/result.json`,
+  },
+}));
 
-  // Step 2: Prepare chunks for parallel processing
-  const chunks = await ctx.step('prepare-chunks', {
-    action: 'Prepare individual chunks for parallel processing',
-    expected: { type: 'array', minLength: 3 },
-    context: { analysis },
-  });
+export const prepareChunksTask = defineTask('prepare-chunks', (args, taskCtx) => ({
+  kind: 'agent',
+  title: 'Prepare chunks for processing',
+  agent: {
+    name: 'chunk-preparer',
+    prompt: {
+      role: 'Data preparer',
+      task: 'Prepare individual chunks for parallel processing',
+      context: args,
+      instructions: ['Split input into chunks', 'Validate each chunk', 'Return chunk array'],
+      outputFormat: 'JSON',
+    },
+    outputSchema: { type: 'array' },
+  },
+  io: {
+    inputJsonPath: `tasks/${taskCtx.effectId}/input.json`,
+    outputJsonPath: `tasks/${taskCtx.effectId}/result.json`,
+  },
+}));
 
-  // Step 3: Process chunks in parallel (fan-out)
-  const chunkSpecs = /** @type {any[]} */ (chunks).map((chunk, i) => ({
-    action: `Process chunk ${i + 1}: transform and validate the chunk data`,
-    expected: { type: 'object', requiredFields: ['chunkResult', 'chunkIndex'] },
-    context: { chunk, index: i },
-  }));
+export const processChunkTask = defineTask('process-chunk', (args, taskCtx) => ({
+  kind: 'agent',
+  title: `Process chunk ${args.index}`,
+  agent: {
+    name: 'chunk-processor',
+    prompt: {
+      role: 'Data processor',
+      task: `Process chunk ${args.index}: transform and validate the chunk data`,
+      context: args,
+      instructions: ['Transform chunk data', 'Validate result', 'Return processed chunk'],
+      outputFormat: 'JSON',
+    },
+    outputSchema: { type: 'object', required: ['chunkResult', 'chunkIndex'] },
+  },
+  io: {
+    inputJsonPath: `tasks/${taskCtx.effectId}/input.json`,
+    outputJsonPath: `tasks/${taskCtx.effectId}/result.json`,
+  },
+}));
 
-  const chunkResults = await ctx.parallel('process-chunks', chunkSpecs);
+export const aggregateResultsTask = defineTask('aggregate-results', (args, taskCtx) => ({
+  kind: 'agent',
+  title: 'Aggregate chunk results',
+  agent: {
+    name: 'result-aggregator',
+    prompt: {
+      role: 'Data aggregator',
+      task: 'Aggregate all chunk results into a single coherent output',
+      context: args,
+      instructions: ['Merge all chunk results', 'Compute statistics', 'Ensure completeness'],
+      outputFormat: 'JSON',
+    },
+    outputSchema: { type: 'object', required: ['merged', 'statistics'] },
+  },
+  io: {
+    inputJsonPath: `tasks/${taskCtx.effectId}/input.json`,
+    outputJsonPath: `tasks/${taskCtx.effectId}/result.json`,
+  },
+}));
 
-  // Step 4: Aggregate results (fan-in)
-  const aggregated = await ctx.step('aggregate-results', {
-    action: 'Aggregate all chunk results into a single coherent output',
-    expected: { type: 'object', requiredFields: ['merged', 'statistics'] },
-    context: { chunkResults },
-  });
+export const validateAggregationTask = defineTask('validate-aggregation', (args, taskCtx) => ({
+  kind: 'agent',
+  title: 'Validate aggregated output',
+  agent: {
+    name: 'aggregation-validator',
+    prompt: {
+      role: 'Quality validator',
+      task: 'Validate that the aggregated output is complete and consistent',
+      context: args,
+      instructions: ['Check completeness', 'Verify consistency', 'Report coverage'],
+      outputFormat: 'JSON',
+    },
+    outputSchema: { type: 'object', required: ['valid', 'coverage'] },
+  },
+  io: {
+    inputJsonPath: `tasks/${taskCtx.effectId}/input.json`,
+    outputJsonPath: `tasks/${taskCtx.effectId}/result.json`,
+  },
+}));
 
-  // Step 5: Validate the aggregated output
-  const validated = await ctx.step('validate-aggregation', {
-    action: 'Validate that the aggregated output is complete and consistent',
-    expected: { type: 'object', requiredFields: ['valid', 'coverage'] },
-    context: { aggregated },
-  });
+/**
+ * {{DESCRIPTION}}
+ */
+export async function process(inputs, ctx) {
+  const analysis = await ctx.task(analyzeInputTask, { input: inputs });
+  const chunks = await ctx.task(prepareChunksTask, { analysis });
+
+  // Process chunks in parallel (fan-out)
+  const chunkResults = await Promise.all(
+    chunks.map((chunk, i) => ctx.task(processChunkTask, { chunk, index: i })),
+  );
+
+  // Aggregate results (fan-in)
+  const aggregated = await ctx.task(aggregateResultsTask, { chunkResults });
+  const validated = await ctx.task(validateAggregationTask, { aggregated });
 
   return { aggregated, validated };
 }
 
-/** @type {import('../../common/scripts/types.js').ProcessEvaluation} */
+/** @type {import('../../obedience-types/scripts/types.js').ProcessEvaluation} */
 export const evaluation = {
   completeness: {
     weight: 0.2,

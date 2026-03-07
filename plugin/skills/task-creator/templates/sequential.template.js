@@ -14,9 +14,9 @@
  *   {{ESTIMATED_DURATION}} - ISO 8601 duration (e.g. PT30M)
  */
 
-// @ts-check
+import { defineTask } from '@a5c-ai/babysitter-sdk';
 
-/** @type {import('../../common/scripts/types.js').ProcessMetadata} */
+/** @type {import('../../obedience-types/scripts/types.js').ProcessMetadata} */
 export const metadata = {
   name: '{{TASK_NAME}}',
   domain: '{{DOMAIN}}',
@@ -26,61 +26,128 @@ export const metadata = {
   tags: ['sequential', '{{DOMAIN}}'],
 };
 
-/**
- * Prescribed process: sequential pipeline.
- *
- * {{DESCRIPTION}}
- *
- * @param {unknown} input - Task input data
- * @param {import('../../common/scripts/types.js').ProcessContext} ctx - Process context
- * @returns {Promise<unknown>}
- */
-export async function prescribedProcess(input, ctx) {
-  // Error handler: revert on critical failure
-  ctx.errorHandler('err-critical', {
+export const errorHandlers = [
+  {
+    id: 'err-critical',
     triggerCondition: 'Any step fails with an unrecoverable error',
     action: 'revert',
     logAs: 'critical-failure',
-  });
+  },
+];
 
-  // Step 1: Analyze input
-  const analysis = await ctx.step('analyze-input', {
-    action: 'Analyze the input data and identify processing requirements',
-    expected: { type: 'object', requiredFields: ['summary', 'requirements'] },
-  });
+export const analyzeInputTask = defineTask('analyze-input', (args, taskCtx) => ({
+  kind: 'agent',
+  title: 'Analyze input data',
+  agent: {
+    name: 'input-analyzer',
+    prompt: {
+      role: 'Data analyst',
+      task: 'Analyze the input data and identify processing requirements',
+      context: args,
+      instructions: ['Examine input structure', 'Identify requirements', 'Produce summary'],
+      outputFormat: 'JSON',
+    },
+    outputSchema: { type: 'object', required: ['summary', 'requirements'] },
+  },
+  io: {
+    inputJsonPath: `tasks/${taskCtx.effectId}/input.json`,
+    outputJsonPath: `tasks/${taskCtx.effectId}/result.json`,
+  },
+}));
 
-  // Step 2: Plan execution
-  const plan = await ctx.step('plan-execution', {
-    action: 'Create an execution plan based on the analysis',
-    expected: { type: 'object', requiredFields: ['steps', 'estimatedEffort'] },
-    context: { analysis },
-  });
+export const planExecutionTask = defineTask('plan-execution', (args, taskCtx) => ({
+  kind: 'agent',
+  title: 'Plan execution',
+  agent: {
+    name: 'execution-planner',
+    prompt: {
+      role: 'Process planner',
+      task: 'Create an execution plan based on the analysis',
+      context: args,
+      instructions: ['Design step sequence', 'Estimate effort', 'Define dependencies'],
+      outputFormat: 'JSON',
+    },
+    outputSchema: { type: 'object', required: ['steps', 'estimatedEffort'] },
+  },
+  io: {
+    inputJsonPath: `tasks/${taskCtx.effectId}/input.json`,
+    outputJsonPath: `tasks/${taskCtx.effectId}/result.json`,
+  },
+}));
 
-  // Step 3: Execute the plan
-  const result = await ctx.step('execute-plan', {
-    action: 'Execute the plan step by step, producing intermediate outputs',
-    expected: { type: 'object', requiredFields: ['output', 'status'] },
-    context: { plan },
-  });
+export const executePlanTask = defineTask('execute-plan', (args, taskCtx) => ({
+  kind: 'agent',
+  title: 'Execute the plan',
+  agent: {
+    name: 'plan-executor',
+    prompt: {
+      role: 'Task executor',
+      task: 'Execute the plan step by step, producing intermediate outputs',
+      context: args,
+      instructions: ['Follow plan steps', 'Produce outputs', 'Track status'],
+      outputFormat: 'JSON',
+    },
+    outputSchema: { type: 'object', required: ['output', 'status'] },
+  },
+  io: {
+    inputJsonPath: `tasks/${taskCtx.effectId}/input.json`,
+    outputJsonPath: `tasks/${taskCtx.effectId}/result.json`,
+  },
+}));
 
-  // Step 4: Validate output
-  const validation = await ctx.step('validate-output', {
-    action: 'Validate the output against the requirements from analysis',
-    expected: { type: 'object', requiredFields: ['valid', 'issues'] },
-    context: { result, requirements: analysis },
-  });
+export const validateOutputTask = defineTask('validate-output', (args, taskCtx) => ({
+  kind: 'agent',
+  title: 'Validate output',
+  agent: {
+    name: 'output-validator',
+    prompt: {
+      role: 'Quality validator',
+      task: 'Validate the output against the requirements from analysis',
+      context: args,
+      instructions: ['Check completeness', 'Verify correctness', 'Report issues'],
+      outputFormat: 'JSON',
+    },
+    outputSchema: { type: 'object', required: ['valid', 'issues'] },
+  },
+  io: {
+    inputJsonPath: `tasks/${taskCtx.effectId}/input.json`,
+    outputJsonPath: `tasks/${taskCtx.effectId}/result.json`,
+  },
+}));
 
-  // Step 5: Finalize
-  const finalOutput = await ctx.step('finalize', {
-    action: 'Produce the final output, incorporating any validation feedback',
-    expected: { type: 'object', requiredFields: ['deliverable'] },
-    context: { result, validation },
-  });
+export const finalizeTask = defineTask('finalize', (args, taskCtx) => ({
+  kind: 'agent',
+  title: 'Finalize output',
+  agent: {
+    name: 'finalizer',
+    prompt: {
+      role: 'Output finalizer',
+      task: 'Produce the final output, incorporating any validation feedback',
+      context: args,
+      instructions: ['Apply fixes', 'Format deliverable', 'Produce final output'],
+      outputFormat: 'JSON',
+    },
+    outputSchema: { type: 'object', required: ['deliverable'] },
+  },
+  io: {
+    inputJsonPath: `tasks/${taskCtx.effectId}/input.json`,
+    outputJsonPath: `tasks/${taskCtx.effectId}/result.json`,
+  },
+}));
 
+/**
+ * {{DESCRIPTION}}
+ */
+export async function process(inputs, ctx) {
+  const analysis = await ctx.task(analyzeInputTask, { input: inputs });
+  const plan = await ctx.task(planExecutionTask, { analysis });
+  const result = await ctx.task(executePlanTask, { plan });
+  const validation = await ctx.task(validateOutputTask, { result, requirements: analysis });
+  const finalOutput = await ctx.task(finalizeTask, { result, validation });
   return finalOutput;
 }
 
-/** @type {import('../../common/scripts/types.js').ProcessEvaluation} */
+/** @type {import('../../obedience-types/scripts/types.js').ProcessEvaluation} */
 export const evaluation = {
   completeness: {
     weight: 0.25,

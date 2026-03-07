@@ -16,7 +16,7 @@ import type {
   RunnerMode,
   RunnerResult,
 } from './scripts/runner-interface.js';
-import type { PreparedTask } from '../common/scripts/types.js';
+import type { PreparedTask } from '../obedience-types/scripts/types.js';
 import { LocalRunner } from './local-runner.js';
 import { DockerRunner } from './docker-runner.js';
 

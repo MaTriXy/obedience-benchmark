@@ -14,9 +14,9 @@
  *   {{ESTIMATED_DURATION}} - ISO 8601 duration (e.g. PT1H)
  */
 
-// @ts-check
+import { defineTask } from '@a5c-ai/babysitter-sdk';
 
-/** @type {import('../../common/scripts/types.js').ProcessMetadata} */
+/** @type {import('../../obedience-types/scripts/types.js').ProcessMetadata} */
 export const metadata = {
   name: '{{TASK_NAME}}',
   domain: '{{DOMAIN}}',
@@ -26,89 +26,175 @@ export const metadata = {
   tags: ['conditional', 'branching', 'rollback', '{{DOMAIN}}'],
 };
 
-/**
- * Prescribed process: conditional branching with rollback.
- *
- * {{DESCRIPTION}}
- *
- * @param {unknown} input - Task input data
- * @param {import('../../common/scripts/types.js').ProcessContext} ctx - Process context
- * @returns {Promise<unknown>}
- */
-export async function prescribedProcess(input, ctx) {
-  // Error handler: revert on branch failure (rollback pattern)
-  ctx.errorHandler('err-branch-failure', {
+export const errorHandlers = [
+  {
+    id: 'err-branch-failure',
     triggerCondition: 'The chosen branch produces invalid output or fails validation',
     action: 'revert',
     logAs: 'branch-rollback',
-  });
-
-  // Error handler: flag for review if both branches fail
-  ctx.errorHandler('err-both-branches-failed', {
+  },
+  {
+    id: 'err-both-branches-failed',
     triggerCondition: 'Both primary and fallback branches fail validation',
     action: 'flag-for-review',
     logAs: 'dual-branch-failure',
-  });
+  },
+];
 
-  // Step 1: Analyze input and determine branch criteria
-  const analysis = await ctx.step('analyze-input', {
-    action: 'Analyze the input and determine which processing strategy is appropriate',
-    expected: { type: 'object', requiredFields: ['criteria', 'recommendation'] },
-  });
-
-  // Step 2: Primary branch decision
-  const branchResult = await ctx.conditional('primary-branch', {
-    condition: 'Input meets criteria for the optimized processing path',
-    ifTrue: {
-      action: 'Execute the optimized processing path (faster, requires specific input shape)',
-      expected: { type: 'object', requiredFields: ['output', 'strategy'] },
+export const analyzeInputTask = defineTask('analyze-input', (args, taskCtx) => ({
+  kind: 'agent',
+  title: 'Analyze input and determine branch criteria',
+  agent: {
+    name: 'branch-analyzer',
+    prompt: {
+      role: 'Decision analyst',
+      task: 'Analyze the input and determine which processing strategy is appropriate',
+      context: args,
+      instructions: ['Examine input shape', 'Evaluate criteria', 'Recommend branch'],
+      outputFormat: 'JSON',
     },
-    ifFalse: {
-      action: 'Execute the standard processing path (slower, handles all input shapes)',
-      expected: { type: 'object', requiredFields: ['output', 'strategy'] },
+    outputSchema: { type: 'object', required: ['criteria', 'recommendation'] },
+  },
+  io: {
+    inputJsonPath: `tasks/${taskCtx.effectId}/input.json`,
+    outputJsonPath: `tasks/${taskCtx.effectId}/result.json`,
+  },
+}));
+
+export const optimizedPathTask = defineTask('optimized-path', (args, taskCtx) => ({
+  kind: 'agent',
+  title: 'Execute optimized processing path',
+  agent: {
+    name: 'optimized-processor',
+    prompt: {
+      role: 'Optimized processor',
+      task: 'Execute the optimized processing path (faster, requires specific input shape)',
+      context: args,
+      instructions: ['Apply optimized strategy', 'Validate input shape', 'Produce output'],
+      outputFormat: 'JSON',
     },
-    expectedResult: true,
-  });
+    outputSchema: { type: 'object', required: ['output', 'strategy'] },
+  },
+  io: {
+    inputJsonPath: `tasks/${taskCtx.effectId}/input.json`,
+    outputJsonPath: `tasks/${taskCtx.effectId}/result.json`,
+  },
+}));
 
-  // Step 3: Validate the branch output
-  const validation = await ctx.step('validate-branch-output', {
-    action: 'Validate the output from the chosen branch against quality criteria',
-    expected: { type: 'object', requiredFields: ['valid', 'issues', 'score'] },
-    context: { branchResult },
-  });
-
-  // Step 4: Rollback decision -- if validation fails, try the other branch
-  const rollbackResult = await ctx.conditional('rollback-decision', {
-    condition: 'Branch output passed validation (no rollback needed)',
-    ifTrue: {
-      action: 'Accept the branch output as-is; no rollback needed',
-      expected: { type: 'object', requiredFields: ['accepted', 'finalOutput'] },
+export const standardPathTask = defineTask('standard-path', (args, taskCtx) => ({
+  kind: 'agent',
+  title: 'Execute standard processing path',
+  agent: {
+    name: 'standard-processor',
+    prompt: {
+      role: 'Standard processor',
+      task: 'Execute the standard processing path (slower, handles all input shapes)',
+      context: args,
+      instructions: ['Apply standard strategy', 'Handle all shapes', 'Produce output'],
+      outputFormat: 'JSON',
     },
-    ifFalse: {
-      action: 'Rollback: discard the failed branch output and execute the alternative branch',
-      expected: { type: 'object', requiredFields: ['rolledBack', 'alternativeOutput'] },
+    outputSchema: { type: 'object', required: ['output', 'strategy'] },
+  },
+  io: {
+    inputJsonPath: `tasks/${taskCtx.effectId}/input.json`,
+    outputJsonPath: `tasks/${taskCtx.effectId}/result.json`,
+  },
+}));
+
+export const validateBranchTask = defineTask('validate-branch-output', (args, taskCtx) => ({
+  kind: 'agent',
+  title: 'Validate branch output',
+  agent: {
+    name: 'branch-validator',
+    prompt: {
+      role: 'Quality validator',
+      task: 'Validate the output from the chosen branch against quality criteria',
+      context: args,
+      instructions: ['Check output validity', 'Identify issues', 'Compute score'],
+      outputFormat: 'JSON',
     },
-    expectedResult: true,
-  });
+    outputSchema: { type: 'object', required: ['valid', 'issues', 'score'] },
+  },
+  io: {
+    inputJsonPath: `tasks/${taskCtx.effectId}/input.json`,
+    outputJsonPath: `tasks/${taskCtx.effectId}/result.json`,
+  },
+}));
 
-  // Step 5: Post-processing (common path after branching)
-  const postProcessed = await ctx.step('post-process', {
-    action: 'Apply post-processing to the final branch output (formatting, cleanup)',
-    expected: { type: 'object', requiredFields: ['deliverable'] },
-    context: { rollbackResult },
-  });
+export const postProcessTask = defineTask('post-process', (args, taskCtx) => ({
+  kind: 'agent',
+  title: 'Post-process final output',
+  agent: {
+    name: 'post-processor',
+    prompt: {
+      role: 'Output formatter',
+      task: 'Apply post-processing to the final branch output (formatting, cleanup)',
+      context: args,
+      instructions: ['Format output', 'Clean up', 'Produce deliverable'],
+      outputFormat: 'JSON',
+    },
+    outputSchema: { type: 'object', required: ['deliverable'] },
+  },
+  io: {
+    inputJsonPath: `tasks/${taskCtx.effectId}/input.json`,
+    outputJsonPath: `tasks/${taskCtx.effectId}/result.json`,
+  },
+}));
 
-  // Step 6: Final validation
-  const finalValidation = await ctx.step('final-validation', {
-    action: 'Perform a final validation pass on the complete output',
-    expected: { type: 'object', requiredFields: ['valid', 'summary'] },
-    context: { postProcessed },
-  });
+export const finalValidationTask = defineTask('final-validation', (args, taskCtx) => ({
+  kind: 'agent',
+  title: 'Final validation',
+  agent: {
+    name: 'final-validator',
+    prompt: {
+      role: 'Final validator',
+      task: 'Perform a final validation pass on the complete output',
+      context: args,
+      instructions: ['Validate completeness', 'Check consistency', 'Produce summary'],
+      outputFormat: 'JSON',
+    },
+    outputSchema: { type: 'object', required: ['valid', 'summary'] },
+  },
+  io: {
+    inputJsonPath: `tasks/${taskCtx.effectId}/input.json`,
+    outputJsonPath: `tasks/${taskCtx.effectId}/result.json`,
+  },
+}));
+
+/**
+ * {{DESCRIPTION}}
+ */
+export async function process(inputs, ctx) {
+  const analysis = await ctx.task(analyzeInputTask, { input: inputs });
+
+  // Primary branch decision
+  let branchResult;
+  if (analysis.criteria.meetsOptimizedCriteria) {
+    branchResult = await ctx.task(optimizedPathTask, { analysis });
+  } else {
+    branchResult = await ctx.task(standardPathTask, { analysis });
+  }
+
+  // Validate branch output
+  const validation = await ctx.task(validateBranchTask, { branchResult });
+
+  // Rollback: if validation fails, try the alternative branch
+  let finalBranchResult = branchResult;
+  if (!validation.valid) {
+    if (analysis.criteria.meetsOptimizedCriteria) {
+      finalBranchResult = await ctx.task(standardPathTask, { analysis });
+    } else {
+      finalBranchResult = await ctx.task(optimizedPathTask, { analysis });
+    }
+  }
+
+  const postProcessed = await ctx.task(postProcessTask, { branchResult: finalBranchResult });
+  const finalValidation = await ctx.task(finalValidationTask, { postProcessed });
 
   return { postProcessed, finalValidation };
 }
 
-/** @type {import('../../common/scripts/types.js').ProcessEvaluation} */
+/** @type {import('../../obedience-types/scripts/types.js').ProcessEvaluation} */
 export const evaluation = {
   completeness: {
     weight: 0.2,

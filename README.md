@@ -63,10 +63,9 @@ obedience-benchmark/
 ├── plugin/                  # Plugin root (referenced by marketplace)
 │   ├── plugin.json          # Plugin manifest (skills registry, metadata)
 │   └── skills/              # Plugin skills (registered in plugin.json)
-│       ├── common/              # Shared types and utilities
+│       ├── obedience-types/      # Shared type definitions and schemas
 │       │   └── scripts/
 │       │       ├── types.ts             # All type definitions
-│       │       ├── process-helpers.js   # ProcessContext API for task process files
 │       │       └── schemas/
 │       │           └── task-definition.schema.json
 │       ├── catalog-manager/     # Browse and filter task catalog
@@ -151,9 +150,11 @@ evaluation:
     criteria: "Must evaluate conditions correctly"
 ```
 
-### `*.process.js` — Prescribed process definition
+### `*.process.js` — Prescribed process definition (babysitter SDK format)
 
 ```javascript
+import { defineTask } from '@a5c-ai/babysitter-sdk';
+
 export const metadata = {
   name: 'my-task',
   domain: 'coding',
@@ -162,38 +163,53 @@ export const metadata = {
   tags: ['example'],
 };
 
-export async function prescribedProcess(input, ctx) {
-  // Sequential step
-  const data = await ctx.step('load-data', {
-    action: 'Load input data from file',
-    expected: { type: 'array', minLength: 1 },
-  });
+export const errorHandlers = [
+  { id: 'handle-failure', triggerCondition: 'Validation fails after retry', action: 'skip-and-log' },
+];
+
+// Task definitions
+export const loadDataTask = defineTask('load-data', (args, taskCtx) => ({
+  kind: 'agent',
+  title: 'Load input data',
+  agent: {
+    name: 'data-loader',
+    prompt: { role: 'Data loader', task: 'Load input data from file', context: args },
+    outputSchema: { type: 'array' },
+  },
+  io: { inputJsonPath: `tasks/${taskCtx.effectId}/input.json`, outputJsonPath: `tasks/${taskCtx.effectId}/result.json` },
+}));
+
+export const processItemTask = defineTask('process-item', (args, taskCtx) => ({
+  kind: 'agent',
+  title: `Process item ${args.label}`,
+  agent: {
+    name: 'item-processor',
+    prompt: { role: 'Processor', task: `Process item ${args.label}`, context: args },
+  },
+  io: { inputJsonPath: `tasks/${taskCtx.effectId}/input.json`, outputJsonPath: `tasks/${taskCtx.effectId}/result.json` },
+}));
+
+// Process function using plain JS control flow
+export async function process(inputs, ctx) {
+  const data = await ctx.task(loadDataTask, { file: 'input.json' });
 
   // Parallel execution
-  const results = await ctx.parallel('process-items', [
-    { action: 'Process item A' },
-    { action: 'Process item B' },
+  const results = await Promise.all([
+    ctx.task(processItemTask, { label: 'A' }),
+    ctx.task(processItemTask, { label: 'B' }),
   ]);
 
-  // Loop with iteration
-  await ctx.loop('validate-results', results, async (item, i) => {
-    await ctx.step(`validate-${i}`, {
-      action: `Validate result ${i}`,
-    });
-  });
+  // Loop with plain for
+  for (let i = 0; i < results.length; i++) {
+    await ctx.task(validateTask, { index: i, item: results[i] });
+  }
 
-  // Conditional branch
-  await ctx.conditional('check-quality', {
-    condition: 'All results pass validation',
-    ifTrue: { action: 'Write final output' },
-    ifFalse: { action: 'Retry failed items' },
-  });
-
-  // Error handler
-  ctx.errorHandler('handle-failure', {
-    triggerCondition: 'Validation fails after retry',
-    action: 'skip-and-log',
-  });
+  // Conditional with plain if/else
+  if (allValid) {
+    await ctx.task(writeOutputTask, {});
+  } else {
+    await ctx.task(retryFailedTask, {});
+  }
 }
 
 export const evaluation = {
@@ -215,7 +231,7 @@ Runs agents in isolated Docker containers with resource limits, network isolatio
 
 Each task is scored 0-100 across applicable dimensions. The weighted score uses weights from the task's evaluation criteria. **Process fidelity is the primary metric** — a model that follows every step but makes a minor error scores higher than one that skips steps but produces a correct answer.
 
-The judge also checks:
+The judge reads the process file directly — importing its `defineTask` exports, `metadata`, `evaluation` criteria, and `errorHandlers` — then compares against the agent's execution logs. It also checks:
 - **Output correctness** — does the final output match what the process would produce if followed exactly?
 - **Consistency** — are intermediate results coherent with each other and the final output?
 

@@ -30,7 +30,7 @@ Browse, search, filter, and validate the benchmark task catalog. The catalog liv
 1. Call `loadCatalog(benchmarksDir)` to scan the benchmarks directory recursively for task directories containing `task.yaml`.
 2. For each task directory:
    a. Load and parse `task.yaml` using the `yaml` package.
-   b. Validate the parsed YAML against `skills/common/scripts/schemas/task-definition.schema.json` using Ajv (best-effort).
+   b. Validate the parsed YAML against `skills/obedience-types/scripts/schemas/task-definition.schema.json` using Ajv (best-effort).
    c. Verify that a `*.process.js` file exists in the directory.
    d. Build a `CatalogEntry` with paths, metadata, and validation status.
 3. If a filter is provided, call `filterCatalog(entries, filter)` to narrow results.
@@ -40,7 +40,7 @@ Browse, search, filter, and validate the benchmark task catalog. The catalog liv
 
 ## Output
 
-- **list/search**: A `TaskSelection` object (see `skills/common/scripts/types.ts`) containing matching catalog entries with metadata, paths, and validation status.
+- **list/search**: A `TaskSelection` object (see `skills/obedience-types/scripts/types.ts`) containing matching catalog entries with metadata, paths, and validation status.
 - **validate**: A `ValidationResult` object with `valid: boolean`, `errors: string[]`, and the `entry` if valid.
 - **summary**: A `CatalogSummary` object with counts grouped by domain, complexity, and dimension coverage.
 
@@ -55,8 +55,8 @@ Browse, search, filter, and validate the benchmark task catalog. The catalog liv
 
 - `skills/catalog-manager/catalog.ts` -- core catalog logic
 - `skills/catalog-manager/catalog.test.ts` -- unit tests
-- `skills/common/scripts/schemas/task-definition.schema.json` -- JSON Schema for task.yaml
-- `skills/common/scripts/types.ts` -- `CatalogEntry`, `CatalogFilter`, `TaskSelection` types
+- `skills/obedience-types/scripts/schemas/task-definition.schema.json` -- JSON Schema for task.yaml
+- `skills/obedience-types/scripts/types.ts` -- `CatalogEntry`, `CatalogFilter`, `TaskSelection` types
 - `skills/catalog-manager/benchmarks/` -- the task catalog directory tree
 
 ## Validation Rules

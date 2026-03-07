@@ -8,7 +8,7 @@
     { "name": "benchmarker", "file": "skills/benchmarker/SKILL.md" },
     { "name": "catalog-manager", "file": "skills/catalog-manager/SKILL.md" },
     { "name": "candidate-runner", "file": "skills/candidate-runner/SKILL.md" },
-    { "name": "common", "file": "skills/common/SKILL.md" },
+    { "name": "obedience-types", "file": "skills/obedience-types/SKILL.md" },
     { "name": "judge", "file": "skills/judge/SKILL.md" },
     { "name": "report-generator", "file": "skills/report-generator/SKILL.md" },
     { "name": "task-creator", "file": "skills/task-creator/SKILL.md" },

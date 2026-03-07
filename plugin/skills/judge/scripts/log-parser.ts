@@ -7,7 +7,7 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import type { LogEvent, ParsedSessionLog, ObservedStep } from '../../common/scripts/types.js';
+import type { LogEvent, ParsedSessionLog, ObservedStep } from '../../obedience-types/scripts/types.js';
 import type { StructuredLog } from '../../candidate-runner/scripts/log-collector.js';
 
 // ---------------------------------------------------------------------------

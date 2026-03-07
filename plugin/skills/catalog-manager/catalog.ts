@@ -20,7 +20,7 @@ import type {
   CatalogEntry,
   CatalogFilter,
   ObedienceDimension,
-} from '../common/scripts/types.js';
+} from '../obedience-types/scripts/types.js';
 
 // ---------------------------------------------------------------------------
 // Additional types exported by this module
@@ -61,7 +61,7 @@ function getSchemaValidator(schemaPath?: string): ReturnType<Ajv2020Instance['co
     schemaPath ??
     path.resolve(
       path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')),
-      '../common/scripts/schemas/task-definition.schema.json',
+      '../obedience-types/scripts/schemas/task-definition.schema.json',
     );
 
   const schemaText = fs.readFileSync(resolvedPath, 'utf-8');

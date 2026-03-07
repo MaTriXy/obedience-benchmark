@@ -6,7 +6,7 @@
  *
  * Tasks consist of:
  *   - metadata.yaml  (task metadata, input spec, evaluation criteria)
- *   - *.process.js   (prescribed process using ProcessContext API)
+ *   - *.process.js   (prescribed process using babysitter SDK defineTask/ctx.task)
  */
 
 import fs from 'node:fs';
@@ -16,7 +16,7 @@ const Ajv2020 = _Ajv2020 as unknown as typeof _Ajv2020.default;
 type Ajv2020Instance = InstanceType<typeof Ajv2020>;
 import YAML from 'yaml';
 
-import type { ObedienceDimension } from '../common/scripts/types.js';
+import type { ObedienceDimension } from '../obedience-types/scripts/types.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -279,7 +279,7 @@ export function validateGeneratedTask(taskDir: string): ValidationResult {
   // 4. Validate against JSON Schema
   const schemaPath = path.resolve(
     path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')),
-    '../common/scripts/schemas/task-definition.schema.json',
+    '../obedience-types/scripts/schemas/task-definition.schema.json',
   );
 
   try {

@@ -18,9 +18,7 @@
     "checkJs": false
   },
   "include": [
-    "shared/**/*.ts",
-    "skills/**/*.ts",
-    "benchmark-tasks/**/*.ts"
+    "plugin/skills/**/*.ts"
   ],
   "exclude": [
     "node_modules",

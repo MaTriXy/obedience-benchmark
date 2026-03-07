@@ -5,7 +5,7 @@
 ### 1. Create the task directory
 
 ```bash
-mkdir skills/catalog-manager/benchmarks/full/my-task-name
+mkdir plugin/skills/catalog-manager/benchmarks/full/my-task-name
 ```
 
 ### 2. Create `task.yaml`
@@ -40,9 +40,11 @@ evaluation:
 
 ### 3. Create the process file
 
-Create `my-task-name.process.js` using the ProcessContext API:
+Create `my-task-name.process.js` using the babysitter SDK format:
 
 ```javascript
+import { defineTask } from '@a5c-ai/babysitter-sdk';
+
 export const metadata = {
   name: 'my-task-name',
   domain: 'coding',
@@ -52,10 +54,52 @@ export const metadata = {
   tags: ['relevant-tag'],
 };
 
-export async function prescribedProcess(input, ctx) {
-  // Define the exact steps the agent must follow
-  // Use ctx.step(), ctx.parallel(), ctx.loop(),
-  // ctx.conditional(), ctx.errorHandler()
+export const errorHandlers = [
+  { id: 'handle-failure', triggerCondition: 'Step fails after retry', action: 'skip-and-log' },
+];
+
+// Define tasks using defineTask()
+export const loadDataTask = defineTask('load-data', (args, taskCtx) => ({
+  kind: 'agent',
+  title: 'Load input data',
+  agent: {
+    name: 'data-loader',
+    prompt: { role: 'Data loader', task: 'Load input data', context: args },
+  },
+  io: { inputJsonPath: `tasks/${taskCtx.effectId}/input.json`, outputJsonPath: `tasks/${taskCtx.effectId}/result.json` },
+}));
+
+export const processItemTask = defineTask('process-item', (args, taskCtx) => ({
+  kind: 'agent',
+  title: `Process item ${args.label}`,
+  agent: {
+    name: 'processor',
+    prompt: { role: 'Processor', task: `Process ${args.label}`, context: args },
+  },
+  io: { inputJsonPath: `tasks/${taskCtx.effectId}/input.json`, outputJsonPath: `tasks/${taskCtx.effectId}/result.json` },
+}));
+
+// Process function using plain JS control flow
+export async function process(inputs, ctx) {
+  const data = await ctx.task(loadDataTask, { file: 'input.json' });
+
+  // Parallel execution with Promise.all
+  const results = await Promise.all([
+    ctx.task(processItemTask, { label: 'A' }),
+    ctx.task(processItemTask, { label: 'B' }),
+  ]);
+
+  // Loops with plain for
+  for (const result of results) {
+    await ctx.task(validateTask, { item: result });
+  }
+
+  // Conditionals with plain if/else
+  if (allValid) {
+    await ctx.task(writeOutputTask, {});
+  } else {
+    await ctx.task(retryFailedTask, {});
+  }
 }
 
 export const evaluation = {
@@ -75,25 +119,26 @@ export const evaluation = {
 Use the catalog-manager skill to validate:
 
 ```
-/catalog-manager Validate task at skills/catalog-manager/benchmarks/full/my-task-name
+/catalog-manager Validate task at plugin/skills/catalog-manager/benchmarks/full/my-task-name
 ```
 
-## ProcessContext API Reference
+## Babysitter SDK Process API Reference
 
-| Method | Signature | Tests Dimensions |
-|--------|-----------|-----------------|
-| `step` | `ctx.step(id, { action, expected?, context? })` | completeness, ordering |
-| `parallel` | `ctx.parallel(id, [specs...])` | parallelism, completeness |
-| `loop` | `ctx.loop(id, collection, bodyFn)` | completeness, granularity |
-| `conditional` | `ctx.conditional(id, { condition, ifTrue, ifFalse? })` | conditionality |
-| `errorHandler` | `ctx.errorHandler(id, { triggerCondition, action })` | errorHandling |
+| Pattern | How to Express | Tests Dimensions |
+|---------|---------------|-----------------|
+| Sequential steps | `await ctx.task(taskDef, args)` | completeness, ordering |
+| Parallel execution | `await Promise.all([ctx.task(...), ctx.task(...)])` | parallelism, completeness |
+| Iteration | `for (const item of collection) { await ctx.task(...) }` | completeness, granularity |
+| Conditional branching | `if (condition) { await ctx.task(...) } else { ... }` | conditionality |
+| Error handling | `export const errorHandlers = [{ id, triggerCondition, action }]` | errorHandling |
 
 ## Quality Checklist
 
 Before submitting a new task:
 
 - [ ] `task.yaml` passes schema validation
-- [ ] Process file exports `metadata`, `prescribedProcess`, and `evaluation`
+- [ ] Process file exports `metadata`, `process`, and `evaluation`
+- [ ] Process file uses `defineTask()` for all task definitions
 - [ ] `metadata.dimensions` matches the dimensions exercised in the process
 - [ ] Evaluation weights sum to 100 for applicable dimensions
 - [ ] N/A dimensions have `weight: 0` and `notApplicable` reason

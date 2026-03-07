@@ -14,9 +14,9 @@
  *   {{ESTIMATED_DURATION}} - ISO 8601 duration (e.g. PT45M)
  */
 
-// @ts-check
+import { defineTask } from '@a5c-ai/babysitter-sdk';
 
-/** @type {import('../../common/scripts/types.js').ProcessMetadata} */
+/** @type {import('../../obedience-types/scripts/types.js').ProcessMetadata} */
 export const metadata = {
   name: '{{TASK_NAME}}',
   domain: '{{DOMAIN}}',
@@ -26,88 +26,126 @@ export const metadata = {
   tags: ['iterative', 'refinement', '{{DOMAIN}}'],
 };
 
-/**
- * Prescribed process: iterative refinement loop.
- *
- * {{DESCRIPTION}}
- *
- * @param {unknown} input - Task input data
- * @param {import('../../common/scripts/types.js').ProcessContext} ctx - Process context
- * @returns {Promise<unknown>}
- */
-export async function prescribedProcess(input, ctx) {
-  // Error handler: skip and log non-critical iteration failures
-  ctx.errorHandler('err-iteration', {
+export const errorHandlers = [
+  {
+    id: 'err-iteration',
     triggerCondition: 'A single iteration fails but overall progress is acceptable',
     action: 'skip-and-log',
     logAs: 'iteration-skipped',
-  });
+  },
+];
 
-  // Step 1: Initialize -- analyze input and set baseline
-  const baseline = await ctx.step('initialize', {
-    action: 'Analyze the input and establish an initial baseline solution',
-    expected: { type: 'object', requiredFields: ['solution', 'qualityScore'] },
-  });
+export const initializeTask = defineTask('initialize', (args, taskCtx) => ({
+  kind: 'agent',
+  title: 'Initialize baseline',
+  agent: {
+    name: 'baseline-initializer',
+    prompt: {
+      role: 'Analyst',
+      task: 'Analyze the input and establish an initial baseline solution',
+      context: args,
+      instructions: ['Examine input', 'Create baseline solution', 'Score quality'],
+      outputFormat: 'JSON',
+    },
+    outputSchema: { type: 'object', required: ['solution', 'qualityScore'] },
+  },
+  io: {
+    inputJsonPath: `tasks/${taskCtx.effectId}/input.json`,
+    outputJsonPath: `tasks/${taskCtx.effectId}/result.json`,
+  },
+}));
 
-  // Step 2: Define iteration targets (used as loop collection)
+export const refineTask = defineTask('refine', (args, taskCtx) => ({
+  kind: 'agent',
+  title: `Refinement pass ${args.iterationIndex + 1}: ${args.focus}`,
+  agent: {
+    name: 'refiner',
+    prompt: {
+      role: 'Quality improver',
+      task: `Apply refinement pass ${args.iterationIndex + 1}: focus on ${args.focus}`,
+      context: args,
+      instructions: ['Identify improvements', 'Apply changes', 'Track modifications'],
+      outputFormat: 'JSON',
+    },
+    outputSchema: { type: 'object', required: ['solution', 'changes'] },
+  },
+  io: {
+    inputJsonPath: `tasks/${taskCtx.effectId}/input.json`,
+    outputJsonPath: `tasks/${taskCtx.effectId}/result.json`,
+  },
+}));
+
+export const evaluateQualityTask = defineTask('evaluate-quality', (args, taskCtx) => ({
+  kind: 'agent',
+  title: `Evaluate quality after pass ${args.iterationIndex + 1}`,
+  agent: {
+    name: 'quality-evaluator',
+    prompt: {
+      role: 'Quality evaluator',
+      task: `Evaluate quality after refinement pass ${args.iterationIndex + 1}`,
+      context: args,
+      instructions: ['Compute quality score', 'Check threshold', 'Report findings'],
+      outputFormat: 'JSON',
+    },
+    outputSchema: { type: 'object', required: ['qualityScore', 'meetsThreshold'] },
+  },
+  io: {
+    inputJsonPath: `tasks/${taskCtx.effectId}/input.json`,
+    outputJsonPath: `tasks/${taskCtx.effectId}/result.json`,
+  },
+}));
+
+export const finalizeTask = defineTask('finalize', (args, taskCtx) => ({
+  kind: 'agent',
+  title: 'Finalize output',
+  agent: {
+    name: 'finalizer',
+    prompt: {
+      role: 'Output finalizer',
+      task: 'Select the best refinement result and produce the final output',
+      context: args,
+      instructions: ['Select best iteration', 'Format deliverable', 'Report final score'],
+      outputFormat: 'JSON',
+    },
+    outputSchema: { type: 'object', required: ['deliverable', 'totalIterations', 'finalScore'] },
+  },
+  io: {
+    inputJsonPath: `tasks/${taskCtx.effectId}/input.json`,
+    outputJsonPath: `tasks/${taskCtx.effectId}/result.json`,
+  },
+}));
+
+/**
+ * {{DESCRIPTION}}
+ */
+export async function process(inputs, ctx) {
+  const baseline = await ctx.task(initializeTask, { input: inputs });
+
   const iterations = [
     { label: 'iteration-1', focus: 'structural-improvements' },
     { label: 'iteration-2', focus: 'detail-refinement' },
     { label: 'iteration-3', focus: 'polish-and-edge-cases' },
   ];
 
-  // Step 3: Iterative refinement loop
-  const refinements = await ctx.loop(
-    'refinement-loop',
-    iterations,
-    async (iteration, index) => {
-      const iter = /** @type {{ label: string; focus: string }} */ (iteration);
+  const refinements = [];
+  for (let i = 0; i < iterations.length; i++) {
+    const iter = iterations[i];
+    const refined = await ctx.task(refineTask, { iterationIndex: i, focus: iter.focus, baseline });
+    const quality = await ctx.task(evaluateQualityTask, { iterationIndex: i, refined });
 
-      // 3a: Apply refinement
-      const refined = await ctx.step(`refine-${iter.label}`, {
-        action: `Apply refinement pass ${index + 1}: focus on ${iter.focus}`,
-        expected: { type: 'object', requiredFields: ['solution', 'changes'] },
-        context: { iteration: iter, index },
-        iteration: { over: 'iterations', current: index },
-      });
+    refinements.push({ refined, quality });
 
-      // 3b: Evaluate quality
-      const quality = await ctx.step(`evaluate-${iter.label}`, {
-        action: `Evaluate quality after refinement pass ${index + 1}`,
-        expected: { type: 'object', requiredFields: ['qualityScore', 'meetsThreshold'] },
-        context: { refined },
-        iteration: { over: 'iterations', current: index },
-      });
+    // Convergence check: exit early if quality threshold met
+    if (quality.meetsThreshold) {
+      break;
+    }
+  }
 
-      // 3c: Check convergence -- decide whether to continue or exit early
-      await ctx.conditional(`convergence-check-${iter.label}`, {
-        condition: `Quality score meets threshold after pass ${index + 1}`,
-        ifTrue: {
-          action: 'Quality threshold met; mark iteration as converged',
-          expected: { type: 'object', requiredFields: ['converged'] },
-        },
-        ifFalse: {
-          action: 'Quality threshold not met; continue to next iteration',
-          expected: { type: 'object', requiredFields: ['continueReason'] },
-        },
-        expectedResult: index === iterations.length - 1, // last iteration expected to converge
-      });
-
-      return { refined, quality };
-    },
-  );
-
-  // Step 4: Finalize -- produce the final output from the best iteration
-  const finalOutput = await ctx.step('finalize', {
-    action: 'Select the best refinement result and produce the final output',
-    expected: { type: 'object', requiredFields: ['deliverable', 'totalIterations', 'finalScore'] },
-    context: { refinements },
-  });
-
+  const finalOutput = await ctx.task(finalizeTask, { refinements });
   return finalOutput;
 }
 
-/** @type {import('../../common/scripts/types.js').ProcessEvaluation} */
+/** @type {import('../../obedience-types/scripts/types.js').ProcessEvaluation} */
 export const evaluation = {
   completeness: {
     weight: 0.2,

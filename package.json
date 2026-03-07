@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Claude Code plugin for benchmarking AI agent obedience to prescribed processes",
   "type": "module",
-  "main": "shared/process-helpers.js",
+  "main": "plugin/plugin.json",
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",

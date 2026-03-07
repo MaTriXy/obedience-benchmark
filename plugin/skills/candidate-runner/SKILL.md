@@ -59,7 +59,7 @@ A `RunnerResult` object (see `scripts/runner-interface.ts`) containing:
 | `Dockerfile.template` | Base Dockerfile used to build candidate agent images |
 | `scripts/runner-interface.ts` | `Runner`, `RunnerConfig`, `RunnerResult` type definitions |
 | `scripts/log-collector.ts` | `LogCollector` class for structured event capture |
-| `../common/scripts/types.ts` | Shared types (`PreparedTask`, `LogEvent`, etc.) |
+| `../obedience-types/scripts/types.ts` | Shared types (`PreparedTask`, `LogEvent`, etc.) |
 
 ## Supported Harnesses
 

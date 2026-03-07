@@ -12,8 +12,8 @@ import type {
   BenchmarkReport,
   Leaderboard,
   LeaderboardEntry,
-} from '../common/scripts/types.js';
-import { ALL_DIMENSIONS } from '../common/scripts/types.js';
+} from '../obedience-types/scripts/types.js';
+import { ALL_DIMENSIONS } from '../obedience-types/scripts/types.js';
 
 // ---------------------------------------------------------------------------
 // Public interface
