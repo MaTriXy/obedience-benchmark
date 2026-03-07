@@ -1,0 +1,58 @@
+name: crossword-puzzle
+domain: algorithms
+complexity: high
+estimatedDuration: "35m"
+description: >
+  Backtracking and constraint satisfaction task. Generate a valid 15x15
+  crossword puzzle grid with rotational symmetry. Load a dictionary, generate
+  a grid skeleton, fill words via backtracking (longest slot first), verify
+  5 constraints, fix violations, and produce a final grid with numbered clues
+  and a constraint verification report.
+
+tags:
+  - full
+  - algorithms
+  - backtracking
+  - constraint-satisfaction
+  - puzzle-generation
+
+dimensions:
+  - completeness
+  - ordering
+  - conditionality
+  - errorHandling
+
+evaluation:
+  completeness:
+    weight: 25
+    criteria: >
+      Agent must produce a fully filled 15x15 grid, a numbered clue list
+      (across and down), and a constraint verification report. All 5 constraints
+      must be checked
+  ordering:
+    weight: 25
+    criteria: >
+      Steps must follow the prescribed sequence: load dictionary -> generate
+      skeleton -> identify slots -> fill words -> verify constraints -> fix
+      violations -> generate output. Filling must process longest slots first
+  conditionality:
+    weight: 25
+    criteria: >
+      Agent must correctly evaluate constraint violations and branch to the
+      fix path only when violations exist. Backtracking must trigger when no
+      valid word fits a slot
+  parallelism:
+    weight: 0
+    notApplicable: "Backtracking is inherently sequential"
+  granularity:
+    weight: 0
+    notApplicable: "No explicit granularity dimension beyond slot-level iteration"
+  aggregation:
+    weight: 0
+    notApplicable: "No aggregation step"
+  errorHandling:
+    weight: 25
+    criteria: >
+      On backtracking exhaustion (no valid word for any candidate), the agent
+      must clear a larger region around the problematic slot and retry rather
+      than failing entirely

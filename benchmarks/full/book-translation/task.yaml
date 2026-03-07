@@ -1,0 +1,61 @@
+name: book-translation
+domain: translation
+complexity: high
+estimatedDuration: "30m"
+description: >
+  Map-reduce translation pipeline. The agent must split a book into chapters
+  and chunks, analyze book-level and chapter-level context (style, tone,
+  terminology), translate all chunks in parallel with context awareness,
+  combine the translated chunks, perform a cross-chunk/cross-chapter
+  consistency check, and produce the final translated book.
+  Tests completeness, ordering, parallelism, granularity, and aggregation.
+
+tags:
+  - full
+  - map-reduce
+  - translation
+  - parallel
+  - nested-loop
+
+dimensions:
+  - completeness
+  - ordering
+  - parallelism
+  - granularity
+  - aggregation
+
+evaluation:
+  completeness:
+    weight: 25
+    criteria: >
+      Agent must execute every stage: read book, split chapters, analyze
+      book-level context, analyze per-chapter context, translate every chunk,
+      combine translations, run consistency check, and produce final output.
+  ordering:
+    weight: 20
+    criteria: >
+      Context analysis must precede translation. Chunk translations must
+      precede combination. Combination must precede the consistency check.
+  conditionality:
+    weight: 0
+    notApplicable: "No conditional branches in this task"
+  parallelism:
+    weight: 20
+    criteria: >
+      Chunks within the same chapter must be translated in parallel, not
+      sequentially. The parallel call should contain all chunks of a chapter.
+  granularity:
+    weight: 20
+    criteria: >
+      The book must be split into chapters, and each chapter into chunks.
+      Every chunk must be individually translated with iteration metadata
+      (chapter index, chunk index).
+  aggregation:
+    weight: 15
+    criteria: >
+      All translated chunks must be recombined into a single coherent book.
+      The consistency check must compare terminology and style across all
+      chapters.
+  errorHandling:
+    weight: 0
+    notApplicable: "No explicit error handling required"

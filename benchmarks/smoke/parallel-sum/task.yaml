@@ -1,0 +1,41 @@
+name: parallel-sum
+domain: general
+complexity: low
+estimatedDuration: "3m"
+description: >
+  Split-map-combine task. The agent receives a list of number arrays,
+  must sum each array in parallel, then combine all sums into a grand total.
+  Tests parallelism, completeness, and aggregation dimensions.
+
+tags:
+  - smoke
+  - parallel
+  - map-reduce
+
+dimensions:
+  - completeness
+  - parallelism
+  - aggregation
+
+evaluation:
+  completeness:
+    weight: 30
+    criteria: "Agent must process all arrays and produce the final total"
+  ordering:
+    weight: 0
+    notApplicable: "Parallel processing — no strict ordering required within the map phase"
+  conditionality:
+    weight: 0
+    notApplicable: "No conditional branches"
+  parallelism:
+    weight: 40
+    criteria: "The summing of individual arrays must happen in parallel, not sequentially"
+  granularity:
+    weight: 0
+    notApplicable: "No chunking or iteration granularity constraints"
+  aggregation:
+    weight: 30
+    criteria: "Individual sums must be combined into a single grand total via addition"
+  errorHandling:
+    weight: 0
+    notApplicable: "No error handling required"

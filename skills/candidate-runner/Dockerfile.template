@@ -1,0 +1,124 @@
+# =============================================================================
+# Obedience Benchmark -- Candidate Agent Container
+#
+# Base Dockerfile template for running candidate agents in Docker isolation.
+# Build with:  docker build -f Dockerfile.template --build-arg HARNESS=claude-code -t obedience-bench/claude-code .
+# Run with:    docker run --env-file .env -v /host/input:/workspace/input:ro -v /host/output:/workspace/output obedience-bench/claude-code
+# =============================================================================
+
+ARG NODE_VERSION=20
+FROM node:${NODE_VERSION}-bookworm-slim
+
+# Build argument: which harness to install (claude-code | codex | custom)
+ARG HARNESS=claude-code
+
+# Metadata labels
+LABEL maintainer="obedience-benchmark"
+LABEL description="Candidate agent container for obedience benchmark"
+LABEL harness="${HARNESS}"
+
+# ---------------------------------------------------------------------------
+# System dependencies
+# ---------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    ca-certificates \
+    jq \
+    && rm -rf /var/lib/apt/lists/*
+
+# ---------------------------------------------------------------------------
+# Create workspace structure
+# ---------------------------------------------------------------------------
+RUN mkdir -p /workspace/input /workspace/output /workspace/logs
+
+WORKDIR /workspace
+
+# ---------------------------------------------------------------------------
+# Install agent harness based on build arg
+# ---------------------------------------------------------------------------
+
+# Claude Code CLI
+RUN if [ "$HARNESS" = "claude-code" ]; then \
+    npm install -g @anthropic-ai/claude-code; \
+    fi
+
+# OpenAI Codex CLI
+RUN if [ "$HARNESS" = "codex" ]; then \
+    npm install -g @openai/codex; \
+    fi
+
+# ---------------------------------------------------------------------------
+# Install a lightweight entrypoint script that:
+#   1. Reads the task prompt from /workspace/task-prompt.md
+#   2. Invokes the agent CLI
+#   3. Writes structured events to /workspace/logs/events.jsonl
+# ---------------------------------------------------------------------------
+COPY <<'ENTRYPOINT_SCRIPT' /usr/local/bin/entrypoint.sh
+#!/bin/bash
+set -euo pipefail
+
+TASK_PROMPT_FILE="/workspace/task-prompt.md"
+EVENTS_LOG="/workspace/logs/events.jsonl"
+
+# Emit agent_start event
+echo "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)\",\"type\":\"agent_start\",\"data\":{\"harness\":\"${HARNESS:-unknown}\"}}" >> "$EVENTS_LOG"
+
+if [ ! -f "$TASK_PROMPT_FILE" ]; then
+    echo "ERROR: Task prompt file not found at $TASK_PROMPT_FILE" >&2
+    echo "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)\",\"type\":\"error\",\"data\":{\"message\":\"Task prompt file not found\"}}" >> "$EVENTS_LOG"
+    exit 1
+fi
+
+TASK_PROMPT=$(cat "$TASK_PROMPT_FILE")
+
+# Route to the appropriate harness
+case "${HARNESS:-claude-code}" in
+    claude-code)
+        echo "$TASK_PROMPT" | claude --print --output-format json --verbose 2>&1 | \
+        while IFS= read -r line; do
+            echo "$line"
+            # Try to capture JSON events
+            if echo "$line" | jq -e . >/dev/null 2>&1; then
+                echo "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)\",\"type\":\"message\",\"data\":$(echo "$line" | jq -c .)}" >> "$EVENTS_LOG"
+            fi
+        done
+        ;;
+    codex)
+        echo "$TASK_PROMPT" | codex --quiet 2>&1 | \
+        while IFS= read -r line; do
+            echo "$line"
+            if echo "$line" | jq -e . >/dev/null 2>&1; then
+                echo "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)\",\"type\":\"message\",\"data\":$(echo "$line" | jq -c .)}" >> "$EVENTS_LOG"
+            fi
+        done
+        ;;
+    custom)
+        # For custom harnesses, run whatever is in /workspace/run.sh or fall back
+        if [ -f /workspace/run.sh ]; then
+            bash /workspace/run.sh "$TASK_PROMPT"
+        else
+            echo "ERROR: Custom harness requires /workspace/run.sh" >&2
+            exit 1
+        fi
+        ;;
+    *)
+        echo "ERROR: Unknown harness: ${HARNESS}" >&2
+        exit 1
+        ;;
+esac
+
+EXIT_CODE=$?
+
+# Emit agent_end event
+echo "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)\",\"type\":\"agent_end\",\"data\":{\"exitCode\":$EXIT_CODE}}" >> "$EVENTS_LOG"
+
+exit $EXIT_CODE
+ENTRYPOINT_SCRIPT
+
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# ---------------------------------------------------------------------------
+# Entrypoint
+# ---------------------------------------------------------------------------
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

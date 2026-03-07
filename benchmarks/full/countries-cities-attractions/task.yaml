@@ -1,0 +1,56 @@
+name: countries-cities-attractions
+domain: data-analysis
+complexity: high
+estimatedDuration: "25m"
+description: >
+  Deep-iteration data-analysis pipeline. For each country in a list, retrieve
+  the top 3 cities by population. For each city, retrieve the top 3 tourist
+  attractions. For each attraction, fetch reviews. Then create a histogram of
+  review themes/sentiments and generate a summary report per country.
+  Tests completeness, ordering, granularity, and aggregation through
+  three levels of nested iteration.
+
+tags:
+  - full
+  - deep-iteration
+  - data-analysis
+  - nested-loop
+
+dimensions:
+  - completeness
+  - ordering
+  - granularity
+  - aggregation
+
+evaluation:
+  completeness:
+    weight: 30
+    criteria: >
+      Agent must process every country, every city within each country, every
+      attraction within each city, and every review within each attraction.
+      No entity may be skipped.
+  ordering:
+    weight: 20
+    criteria: >
+      Data retrieval must proceed top-down: countries -> cities -> attractions
+      -> reviews. The histogram and report steps must follow data collection.
+  conditionality:
+    weight: 0
+    notApplicable: "No conditional branches in this task"
+  parallelism:
+    weight: 0
+    notApplicable: "Iteration is sequential by design to test deep nesting"
+  granularity:
+    weight: 25
+    criteria: >
+      Three levels of nesting must be present: country loop containing city
+      loop containing attraction loop. Each level must use distinct step IDs
+      with iteration metadata.
+  aggregation:
+    weight: 25
+    criteria: >
+      Reviews must be aggregated into a sentiment histogram. Per-country
+      summary reports must be generated combining city and attraction data.
+  errorHandling:
+    weight: 0
+    notApplicable: "No explicit error handling required"

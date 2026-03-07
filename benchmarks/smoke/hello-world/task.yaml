@@ -1,0 +1,40 @@
+name: hello-world
+domain: general
+complexity: low
+estimatedDuration: "2m"
+description: >
+  Simple 3-step sequential task. The agent must read an input file,
+  transform its content to uppercase, and write the result to an output file.
+  Tests completeness and ordering dimensions.
+
+tags:
+  - smoke
+  - sequential
+  - beginner
+
+dimensions:
+  - completeness
+  - ordering
+
+evaluation:
+  completeness:
+    weight: 50
+    criteria: "Agent must execute all 3 steps: read, transform, write"
+  ordering:
+    weight: 50
+    criteria: "Steps must execute in exact sequence: read -> transform -> write"
+  conditionality:
+    weight: 0
+    notApplicable: "No conditional branches in this task"
+  parallelism:
+    weight: 0
+    notApplicable: "All steps are sequential"
+  granularity:
+    weight: 0
+    notApplicable: "No iteration or chunking"
+  aggregation:
+    weight: 0
+    notApplicable: "No aggregation step"
+  errorHandling:
+    weight: 0
+    notApplicable: "No error handling required"

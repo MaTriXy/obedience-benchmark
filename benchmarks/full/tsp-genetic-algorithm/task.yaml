@@ -1,0 +1,60 @@
+name: tsp-genetic-algorithm
+domain: coding
+complexity: high
+estimatedDuration: "30m"
+description: >
+  Iterative refinement task. Write a genetic algorithm TSP solver, run it on
+  5 test cases of increasing city counts (5, 8, 12, 16, 20), profile and
+  optimize any test case that exceeds 10 seconds, and repeat optimization
+  up to 3 times. Produces a before/after performance comparison table.
+  Tests completeness, ordering, conditionality, granularity, and error handling.
+
+tags:
+  - full
+  - coding
+  - optimization
+  - iterative-refinement
+  - genetic-algorithm
+
+dimensions:
+  - completeness
+  - ordering
+  - conditionality
+  - granularity
+  - errorHandling
+
+evaluation:
+  completeness:
+    weight: 25
+    criteria: >
+      Agent must produce a working TSP solver, run all 5 test cases, perform
+      optimization cycles as needed, and produce the final comparison table
+  ordering:
+    weight: 20
+    criteria: >
+      Steps must follow the prescribed sequence: implement -> test -> profile ->
+      optimize -> retest. Optimization cycles must not begin before initial
+      test results are collected
+  conditionality:
+    weight: 20
+    criteria: >
+      Agent must correctly evaluate the 10-second threshold and only enter
+      optimization when at least one test case exceeds it. Within each cycle,
+      agent must check whether failures remain and break early if all pass
+  granularity:
+    weight: 15
+    criteria: >
+      Agent must iterate over each of the 5 test cases individually and
+      perform up to 3 optimization cycles, re-running only the failing subset
+  parallelism:
+    weight: 0
+    notApplicable: "All steps are sequential or loop-based"
+  aggregation:
+    weight: 0
+    notApplicable: "No explicit aggregation step beyond the comparison table"
+  errorHandling:
+    weight: 20
+    criteria: >
+      If optimization cycles exhaust max attempts (3), the agent must stop
+      gracefully and report current performance state rather than looping
+      indefinitely

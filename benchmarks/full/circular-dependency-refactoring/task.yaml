@@ -1,0 +1,60 @@
+name: circular-dependency-refactoring
+domain: coding
+complexity: high
+estimatedDuration: "20m"
+description: >
+  Conditional refactoring pipeline with rollback. Build a module dependency
+  graph, identify all circular dependencies, and for each cycle trace the
+  call chain, propose a refactoring, conditionally implement it only if
+  three conditions are met (no public API changes, tests pass, fewer
+  imports), and revert on failure. Produce a summary report.
+  Tests completeness, ordering, conditionality, and error handling.
+
+tags:
+  - full
+  - coding
+  - conditional
+  - error-handling
+  - refactoring
+
+dimensions:
+  - completeness
+  - ordering
+  - conditionality
+  - errorHandling
+
+evaluation:
+  completeness:
+    weight: 25
+    criteria: >
+      Agent must build the dependency graph, find all cycles, process every
+      cycle (trace, propose, conditionally implement or revert), and produce
+      the final summary report.
+  ordering:
+    weight: 20
+    criteria: >
+      Dependency graph must be built before cycle detection. Each cycle must
+      be traced before a refactoring is proposed. The conditional check must
+      precede implementation. The summary report must come last.
+  conditionality:
+    weight: 30
+    criteria: >
+      For each cycle the agent must evaluate three conditions: (1) no public
+      API changes, (2) tests pass, (3) fewer imports after refactoring. Only
+      if all three are satisfied should the refactoring be implemented;
+      otherwise the change must be reverted and logged as skipped.
+  parallelism:
+    weight: 0
+    notApplicable: "Cycles are processed sequentially to avoid conflicting refactors"
+  granularity:
+    weight: 0
+    notApplicable: "No chunking granularity constraints"
+  aggregation:
+    weight: 0
+    notApplicable: "No aggregation beyond the final report"
+  errorHandling:
+    weight: 25
+    criteria: >
+      An error handler must be registered to revert changes on refactoring
+      failure. The summary must distinguish resolved cycles from skipped ones
+      and include before/after import counts.

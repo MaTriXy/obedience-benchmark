@@ -1,0 +1,253 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://obedience-benchmark.dev/schemas/task-definition.schema.json",
+  "title": "Obedience Benchmark Task Definition",
+  "description": "Schema for task YAML files. Defines metadata, input specification, expected output, and evaluation criteria. The prescribed process itself is defined in a separate *.process.js file (not in YAML).",
+  "type": "object",
+  "required": ["version", "metadata", "description", "processRef", "evaluation"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "Schema version for forward compatibility."
+    },
+    "metadata": {
+      "$ref": "#/$defs/Metadata"
+    },
+    "description": {
+      "type": "string",
+      "description": "Natural language description of the task, including the full prescribed process the agent must follow."
+    },
+    "processRef": {
+      "type": "string",
+      "description": "Relative path to the *.process.js file that defines the prescribed process as executable code. This is the single source of truth for what steps the agent must follow.",
+      "pattern": "^\\.\\/.*\\.process\\.js$"
+    },
+    "input": {
+      "$ref": "#/$defs/InputSpec"
+    },
+    "expectedOutput": {
+      "$ref": "#/$defs/ExpectedOutputSpec"
+    },
+    "evaluation": {
+      "$ref": "#/$defs/EvaluationCriteria"
+    }
+  },
+
+  "$defs": {
+
+    "Metadata": {
+      "type": "object",
+      "required": ["name", "domain", "complexity"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Unique human-readable task name.",
+          "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+        },
+        "domain": {
+          "type": "string",
+          "description": "Problem domain.",
+          "enum": [
+            "translation",
+            "code-refactoring",
+            "data-analysis",
+            "content-generation",
+            "research",
+            "testing",
+            "devops",
+            "other"
+          ]
+        },
+        "complexity": {
+          "type": "string",
+          "enum": ["low", "medium", "high"],
+          "description": "Overall process complexity (not task difficulty)."
+        },
+        "estimatedDuration": {
+          "type": "string",
+          "description": "ISO 8601 duration estimate for a compliant agent. E.g. PT30M, PT2H.",
+          "pattern": "^P(?!$)(T(?=\\d)(\\d+H)?(\\d+M)?(\\d+S)?)?$"
+        },
+        "requiredCapabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "file-read",
+              "file-write",
+              "shell-exec",
+              "web-fetch",
+              "web-search",
+              "code-execution",
+              "browser",
+              "multi-file-edit",
+              "image-generation",
+              "long-context"
+            ]
+          },
+          "uniqueItems": true,
+          "description": "Capabilities the agent must have to attempt this task."
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true,
+          "description": "Free-form tags for filtering and catalog queries."
+        }
+      }
+    },
+
+    "InputSpec": {
+      "type": "object",
+      "description": "Specification of the input data the agent receives.",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["inline", "file", "directory", "url", "generated"],
+          "description": "How input data is provided."
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of the input."
+        },
+        "generatorRef": {
+          "type": "string",
+          "description": "Reference to a generator script (for type=generated). Relative to task dir."
+        },
+        "artifacts": {
+          "type": "array",
+          "description": "List of input artifacts.",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "path": { "type": "string", "description": "Relative path within the task's input directory." },
+              "url": { "type": "string", "format": "uri" },
+              "description": { "type": "string" },
+              "format": { "type": "string", "description": "MIME type or file extension." },
+              "inlineContent": { "type": "string", "description": "Small inline data." }
+            }
+          }
+        },
+        "parameters": {
+          "type": "object",
+          "description": "Key-value parameters passed to the agent.",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "number" },
+              { "type": "boolean" },
+              { "type": "array", "items": { "type": "string" } }
+            ]
+          }
+        }
+      }
+    },
+
+    "ExpectedOutputSpec": {
+      "type": "object",
+      "description": "Specification of the outputs the agent should produce.",
+      "additionalProperties": false,
+      "properties": {
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "format"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "format": {
+                "type": "string",
+                "description": "Expected format: markdown, json, csv, python, directory, etc."
+              },
+              "description": { "type": "string" },
+              "validationRules": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Natural-language rules the judge should verify on this artifact."
+              }
+            }
+          }
+        },
+        "properties": {
+          "type": "object",
+          "description": "Key-value expected properties for structural validation.",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "number" },
+              { "type": "boolean" }
+            ]
+          }
+        }
+      }
+    },
+
+    "EvaluationCriteria": {
+      "type": "object",
+      "description": "Criteria the judge uses to score obedience across 7 dimensions. Note: the detailed step-by-step process is defined in the *.process.js file, not here. This section provides dimension weights and natural-language checks.",
+      "required": ["dimensions"],
+      "additionalProperties": false,
+      "properties": {
+        "dimensions": {
+          "type": "object",
+          "required": [
+            "completeness",
+            "ordering",
+            "conditionality",
+            "parallelism",
+            "granularity",
+            "aggregation",
+            "errorHandling"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "completeness": { "$ref": "#/$defs/DimensionCriteria" },
+            "ordering": { "$ref": "#/$defs/DimensionCriteria" },
+            "conditionality": { "$ref": "#/$defs/DimensionCriteria" },
+            "parallelism": { "$ref": "#/$defs/DimensionCriteria" },
+            "granularity": { "$ref": "#/$defs/DimensionCriteria" },
+            "aggregation": { "$ref": "#/$defs/DimensionCriteria" },
+            "errorHandling": { "$ref": "#/$defs/DimensionCriteria" }
+          }
+        },
+        "scoringNotes": {
+          "type": "string",
+          "description": "Additional guidance for the judge when scoring this task."
+        }
+      }
+    },
+
+    "DimensionCriteria": {
+      "type": "object",
+      "required": ["weight", "checks"],
+      "additionalProperties": false,
+      "properties": {
+        "weight": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Relative weight of this dimension for this task (0-1). Weights across dimensions need not sum to 1; they are normalized at scoring time."
+        },
+        "checks": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "Natural-language checks the judge must verify for this dimension."
+        },
+        "notApplicable": {
+          "type": "boolean",
+          "default": false,
+          "description": "Set true if this dimension is not relevant for this task (weight is ignored)."
+        }
+      }
+    }
+  }
+}

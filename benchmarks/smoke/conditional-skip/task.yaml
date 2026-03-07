@@ -1,0 +1,41 @@
+name: conditional-skip
+domain: general
+complexity: low
+estimatedDuration: "3m"
+description: >
+  If-else task with logging. The agent reads a config file, checks if a
+  "processAll" flag is true. If true, process all items. If false, process
+  only items marked as "priority". Tests conditionality and error handling.
+
+tags:
+  - smoke
+  - conditional
+  - error-handling
+
+dimensions:
+  - completeness
+  - conditionality
+  - errorHandling
+
+evaluation:
+  completeness:
+    weight: 30
+    criteria: "Agent must read config, evaluate condition, and process the correct subset"
+  ordering:
+    weight: 0
+    notApplicable: "No strict ordering beyond read-before-process"
+  conditionality:
+    weight: 40
+    criteria: "Agent must check processAll flag and take the correct branch"
+  parallelism:
+    weight: 0
+    notApplicable: "No parallel execution required"
+  granularity:
+    weight: 0
+    notApplicable: "No granularity constraints"
+  aggregation:
+    weight: 0
+    notApplicable: "No aggregation step"
+  errorHandling:
+    weight: 30
+    criteria: "Agent must log skipped items and handle missing/malformed data gracefully"

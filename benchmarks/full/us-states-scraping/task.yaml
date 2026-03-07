@@ -1,0 +1,60 @@
+name: us-states-scraping
+domain: data-analysis
+complexity: high
+estimatedDuration: "20m"
+description: >
+  Map-reduce scraping pipeline with validation. Load a list of 50 US states,
+  scrape data for all states in parallel (governor, population, top
+  industries), cross-validate population against census totals, conditionally
+  re-scrape states that deviate more than 5%, group states into 5 regions,
+  compute per-region statistics, and generate a markdown report.
+  Tests completeness, parallelism, conditionality, and aggregation.
+
+tags:
+  - full
+  - map-reduce
+  - data-analysis
+  - parallel
+  - validation
+  - scraping
+
+dimensions:
+  - completeness
+  - parallelism
+  - conditionality
+  - aggregation
+
+evaluation:
+  completeness:
+    weight: 25
+    criteria: >
+      Agent must process all 50 states: scrape data, cross-validate,
+      handle deviations, group by region, compute stats, and generate the
+      final report.
+  ordering:
+    weight: 0
+    notApplicable: "Parallelism is the primary execution model; strict ordering only applies between phases"
+  conditionality:
+    weight: 25
+    criteria: >
+      States whose population deviates more than 5% from census totals must
+      be re-scraped. The conditional must branch correctly between re-scrape
+      and proceed paths.
+  parallelism:
+    weight: 25
+    criteria: >
+      All 50 states must be scraped in a single parallel call, not
+      sequentially. Each parallel task must collect governor, population,
+      and top industries.
+  granularity:
+    weight: 0
+    notApplicable: "No multi-level chunking required"
+  aggregation:
+    weight: 25
+    criteria: >
+      States must be grouped into 5 regions. Per-region average population
+      and top industry must be computed. A markdown report with tables per
+      region must be generated.
+  errorHandling:
+    weight: 0
+    notApplicable: "No explicit error handling beyond the re-scrape conditional"

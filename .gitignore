@@ -1,2 +1,5 @@
-.a5c/logs/
-.a5c/node_modules/
+.a5c/
+node_modules/
+dist/
+results/
+*.js.map

@@ -1,0 +1,72 @@
+{
+  "version": "1.0",
+  "name": "obedience-benchmark-marketplace",
+  "description": "Plugin marketplace for the Obedience Benchmark ecosystem. Hosts benchmark plugins, task packs, and judge extensions.",
+  "updatedAt": "2026-03-07T00:00:00.000Z",
+  "plugins": [
+    {
+      "id": "obedience-benchmark",
+      "name": "Obedience Benchmark",
+      "version": "0.1.0",
+      "description": "Core benchmark plugin for measuring AI agent obedience to prescribed processes. Tests whether agents follow specific procedural instructions across 7 dimensions: completeness, ordering, conditionality, parallelism, granularity, aggregation, and error handling.",
+      "author": "obedience-benchmark",
+      "license": "MIT",
+      "homepage": "https://github.com/obedience-benchmark/obedience-benchmark",
+      "keywords": [
+        "benchmark",
+        "obedience",
+        "agent-testing",
+        "process-fidelity",
+        "claude-code-plugin"
+      ],
+      "skills": [
+        "catalog-manager",
+        "task-preparer",
+        "candidate-runner",
+        "judge",
+        "report-generator",
+        "task-creator",
+        "benchmarker"
+      ],
+      "taskCount": 10,
+      "domains": [
+        "general",
+        "translation",
+        "data-analysis",
+        "coding",
+        "text-processing",
+        "algorithms"
+      ],
+      "installPath": "plugins/obedience-benchmark",
+      "pluginJsonPath": "plugin.json",
+      "verified": true,
+      "featured": true,
+      "downloads": 0,
+      "rating": 0,
+      "createdAt": "2026-03-07T00:00:00.000Z",
+      "updatedAt": "2026-03-07T00:00:00.000Z"
+    }
+  ],
+  "categories": [
+    {
+      "id": "benchmarking",
+      "name": "Benchmarking",
+      "description": "Plugins for testing and evaluating AI agent capabilities"
+    },
+    {
+      "id": "task-packs",
+      "name": "Task Packs",
+      "description": "Additional benchmark task collections for specific domains"
+    },
+    {
+      "id": "judge-extensions",
+      "name": "Judge Extensions",
+      "description": "Custom scoring dimensions and evaluation strategies"
+    },
+    {
+      "id": "runner-harnesses",
+      "name": "Runner Harnesses",
+      "description": "Adapters for additional AI agent platforms"
+    }
+  ]
+}

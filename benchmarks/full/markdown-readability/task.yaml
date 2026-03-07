@@ -1,0 +1,63 @@
+name: markdown-readability
+domain: text-processing
+complexity: high
+estimatedDuration: "25m"
+description: >
+  Recursive decomposition task. Read a large (50,000+ word) markdown document,
+  recursively split it by heading levels into leaf sections, score each section
+  with Flesch-Kincaid readability, rewrite low-scoring sections targeting a
+  60-70 readability score, reassemble the document bottom-up, and produce a
+  diff and summary table. Tests completeness, ordering, conditionality,
+  granularity, and aggregation.
+
+tags:
+  - full
+  - text-processing
+  - readability
+  - recursive-decomposition
+  - rewriting
+
+dimensions:
+  - completeness
+  - ordering
+  - conditionality
+  - granularity
+  - aggregation
+
+evaluation:
+  completeness:
+    weight: 20
+    criteria: >
+      Agent must read the document, split into sections, score all leaf sections,
+      rewrite those below 40, reassemble, generate a diff, and produce the
+      summary table
+  ordering:
+    weight: 20
+    criteria: >
+      Steps must follow the prescribed sequence: read -> split -> score -> rewrite ->
+      reassemble -> diff -> summary. Reassembly must not begin before all rewrites
+      are complete
+  conditionality:
+    weight: 20
+    criteria: >
+      Agent must correctly evaluate the readability threshold (below 40 triggers
+      rewrite). After rewriting, sections still below 50 must be flagged for
+      manual review instead of further rewriting
+  parallelism:
+    weight: 0
+    notApplicable: "Sections are processed in a loop, not required to be parallel"
+  granularity:
+    weight: 20
+    criteria: >
+      Agent must recursively split by heading levels to reach leaf sections and
+      process each leaf individually. Rewriting must preserve original content
+      semantics
+  aggregation:
+    weight: 20
+    criteria: >
+      Agent must reassemble the document bottom-up preserving heading structure,
+      and produce both a unified diff and a summary table with per-section
+      before/after scores
+  errorHandling:
+    weight: 0
+    notApplicable: "No explicit error handling required beyond conditional flagging"
