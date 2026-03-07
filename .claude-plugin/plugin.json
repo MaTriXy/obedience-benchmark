@@ -1,0 +1,8 @@
+{
+  "name": "obedience-benchmark",
+  "description": "Benchmark plugin for measuring AI agent obedience to prescribed processes. Tests whether agents follow specific procedural instructions across 7 dimensions: completeness, ordering, conditionality, parallelism, granularity, aggregation, and error handling.",
+  "author": {
+    "name": "obedience-benchmark",
+    "email": "obedience-benchmark@example.com"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "obedience-benchmark",
+  "description": "Marketplace for the Obedience Benchmark plugin ecosystem — benchmark task packs, judge extensions, and runner harnesses for testing AI agent process fidelity.",
+  "owner": {
+    "name": "obedience-benchmark",
+    "email": "obedience-benchmark@example.com"
+  },
+  "plugins": [
+    {
+      "name": "obedience-benchmark",
+      "description": "Core benchmark plugin for measuring AI agent obedience to prescribed processes. 7 skills: catalog manager, task creator, task preparer, candidate runner, judge, report generator, and benchmarker orchestrator. Includes 10 seed benchmark tasks across 6 domains.",
+      "version": "0.1.0",
+      "author": {
+        "name": "obedience-benchmark",
+        "email": "obedience-benchmark@example.com"
+      },
+      "source": ".",
+      "category": "development",
+      "homepage": "https://github.com/obedience-benchmark/obedience-benchmark",
+      "tags": [
+        "benchmark",
+        "obedience",
+        "agent-testing",
+        "process-fidelity"
+      ]
+    }
+  ]
+}
