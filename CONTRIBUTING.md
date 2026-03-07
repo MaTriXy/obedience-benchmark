@@ -5,7 +5,7 @@
 ### 1. Create the task directory
 
 ```bash
-mkdir benchmarks/full/my-task-name
+mkdir skills/catalog-manager/benchmarks/full/my-task-name
 ```
 
 ### 2. Create `task.yaml`
@@ -75,7 +75,7 @@ export const evaluation = {
 Use the catalog-manager skill to validate:
 
 ```
-/catalog-manager Validate task at benchmarks/full/my-task-name
+/catalog-manager Validate task at skills/catalog-manager/benchmarks/full/my-task-name
 ```
 
 ## ProcessContext API Reference

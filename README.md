@@ -22,10 +22,14 @@ Most benchmarks test whether a model can produce a correct answer. This benchmar
 
 ## Quick Start
 
-### Install the plugin
+### Add the marketplace and install
 
 ```bash
-claude plugin install obedience-benchmark
+# Add this repo as a marketplace
+/plugin marketplace add obedience-benchmark/obedience-benchmark
+
+# Install the plugin
+/plugin install obedience-benchmark
 ```
 
 ### Run a benchmark
@@ -53,7 +57,9 @@ Use the `benchmarker` skill to run a full suite:
 
 ```
 obedience-benchmark/
-├── plugin.json              # Plugin manifest
+├── .claude-plugin/
+│   ├── plugin.json          # Claude Code plugin manifest
+│   └── marketplace.json     # Marketplace manifest for this repo
 ├── package.json             # Node.js project
 ├── shared/                  # Shared types and utilities
 │   ├── types.ts             # All type definitions
@@ -63,30 +69,27 @@ obedience-benchmark/
 │   ├── runner-interface.ts  # Runner abstraction layer
 │   └── schemas/             # JSON Schema files
 │       └── task-definition.schema.json
-├── skills/                  # Plugin skills
+├── skills/                  # Plugin skills (auto-discovered)
 │   ├── catalog-manager/     # Browse and filter task catalog
+│   │   └── benchmarks/      # Task catalog (under catalog-manager per spec)
+│   │       ├── smoke/       # Simple smoke tests
+│   │       │   ├── hello-world/
+│   │       │   ├── parallel-sum/
+│   │       │   └── conditional-skip/
+│   │       └── full/        # Full benchmark tasks
+│   │           ├── book-translation/
+│   │           ├── countries-cities-attractions/
+│   │           ├── circular-dependency-refactoring/
+│   │           ├── us-states-scraping/
+│   │           ├── tsp-genetic-algorithm/
+│   │           ├── markdown-readability/
+│   │           └── crossword-puzzle/
 │   ├── task-creator/        # Author new benchmark tasks
 │   ├── task-preparer/       # Generate input data and artifacts
 │   ├── candidate-runner/    # Execute candidate agents
 │   ├── judge/               # Score obedience across 7 dimensions
 │   ├── report-generator/    # Compile reports and leaderboards
 │   └── benchmarker/         # Top-level orchestrator
-├── benchmarks/              # Task catalog
-│   ├── smoke/               # Simple smoke tests
-│   │   ├── hello-world/
-│   │   ├── parallel-sum/
-│   │   └── conditional-skip/
-│   └── full/                # Full benchmark tasks
-│       ├── book-translation/
-│       ├── countries-cities-attractions/
-│       ├── circular-dependency-refactoring/
-│       ├── us-states-scraping/
-│       ├── tsp-genetic-algorithm/
-│       ├── markdown-readability/
-│       └── crossword-puzzle/
-├── marketplace/             # Plugin marketplace
-│   ├── marketplace.ts
-│   └── registry/
 └── results/                 # Benchmark run results (gitignored)
 ```
 
@@ -96,7 +99,7 @@ obedience-benchmark/
 Top-level orchestrator. Runs the full pipeline: catalog → prepare → run → judge → report.
 
 ### catalog-manager
-Browse, search, and filter the task catalog by domain, complexity, dimensions, and tags.
+Browse, search, and filter the task catalog by domain, complexity, dimensions, and tags. The benchmark task catalog lives under `skills/catalog-manager/benchmarks/`.
 
 ### task-creator
 Author new benchmark tasks with templates and validation.
@@ -108,7 +111,7 @@ Generate synthetic input data (books, codebases, datasets) for benchmark tasks.
 Execute agents in Docker containers or local subprocesses with log capture.
 
 ### judge
-Score agent behavior against prescribed processes across all 7 obedience dimensions.
+Score agent behavior against prescribed processes across all 7 obedience dimensions. The judge is an LLM-as-judge that analyzes session logs, checks process fidelity, verifies output correctness, and checks consistency of intermediate results.
 
 ### report-generator
 Compile scorecards into markdown reports with dimension analysis and leaderboard rankings.
@@ -204,11 +207,16 @@ Runs agents in isolated Docker containers with resource limits, network isolatio
 
 Each task is scored 0-100 across applicable dimensions. The weighted score uses weights from the task's evaluation criteria. **Process fidelity is the primary metric** — a model that follows every step but makes a minor error scores higher than one that skips steps but produces a correct answer.
 
+The judge also checks:
+- **Output correctness** — does the final output match what the process would produce if followed exactly?
+- **Consistency** — are intermediate results coherent with each other and the final output?
+
 ## Marketplace
 
-The plugin includes a marketplace for discovering and sharing:
-- Benchmark task packs for specific domains
-- Judge extensions with custom scoring dimensions
-- Runner harnesses for additional AI platforms
+This repository is a Claude Code plugin marketplace. To add it:
 
-See `marketplace/` for the registry and management tools.
+```bash
+/plugin marketplace add obedience-benchmark/obedience-benchmark
+```
+
+The marketplace manifest at `.claude-plugin/marketplace.json` follows the official Anthropic marketplace schema.

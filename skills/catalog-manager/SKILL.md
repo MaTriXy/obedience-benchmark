@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Browse, search, filter, and validate the benchmark task catalog. The catalog lives in `skills/catalog-manager/benchmarks/` organized by domain. Each task is a directory containing a `metadata.yaml` (metadata + evaluation criteria) and a `*.process.js` file (the prescribed process as executable code).
+Browse, search, filter, and validate the benchmark task catalog. The catalog lives in `skills/catalog-manager/benchmarks/` organized by domain. Each task is a directory containing a `task.yaml` (metadata + evaluation criteria) and a `*.process.js` file (the prescribed process as executable code).
 
 ## When to Use
 
@@ -27,11 +27,11 @@ Browse, search, filter, and validate the benchmark task catalog. The catalog liv
 
 ## Process
 
-1. Call `loadCatalog(benchmarksDir)` to scan the benchmarks directory recursively for task directories containing `metadata.yaml`.
+1. Call `loadCatalog(benchmarksDir)` to scan the benchmarks directory recursively for task directories containing `task.yaml`.
 2. For each task directory:
-   a. Load and parse `metadata.yaml` using the `yaml` package.
-   b. Validate the parsed YAML against `shared/schemas/task-definition.schema.json` using Ajv.
-   c. Verify that the `processRef` file exists on disk.
+   a. Load and parse `task.yaml` using the `yaml` package.
+   b. Validate the parsed YAML against `shared/schemas/task-definition.schema.json` using Ajv (best-effort).
+   c. Verify that a `*.process.js` file exists in the directory.
    d. Build a `CatalogEntry` with paths, metadata, and validation status.
 3. If a filter is provided, call `filterCatalog(entries, filter)` to narrow results.
 4. For `validate` action, call `validateTask(taskDir)` on individual task directories.
@@ -46,7 +46,7 @@ Browse, search, filter, and validate the benchmark task catalog. The catalog liv
 
 ## Key Functions
 
-- `loadCatalog(benchmarksDir: string): CatalogEntry[]` -- scan dirs, load metadata.yaml, validate, return entries
+- `loadCatalog(benchmarksDir: string): CatalogEntry[]` -- scan dirs, load task.yaml, validate, return entries
 - `filterCatalog(entries: CatalogEntry[], filter: CatalogFilter): CatalogEntry[]` -- filter by domain, complexity, dimensions, tags, name pattern
 - `validateTask(taskDir: string): ValidationResult` -- validate a single task directory fully
 - `getCatalogSummary(entries: CatalogEntry[]): CatalogSummary` -- stats: count by domain, complexity, dimension coverage
@@ -55,20 +55,20 @@ Browse, search, filter, and validate the benchmark task catalog. The catalog liv
 
 - `skills/catalog-manager/catalog.ts` -- core catalog logic
 - `skills/catalog-manager/catalog.test.ts` -- unit tests
-- `shared/schemas/task-definition.schema.json` -- JSON Schema for metadata.yaml
+- `shared/schemas/task-definition.schema.json` -- JSON Schema for task.yaml
 - `shared/types.ts` -- `CatalogEntry`, `CatalogFilter`, `TaskSelection` types
 - `skills/catalog-manager/benchmarks/` -- the task catalog directory tree
 
 ## Validation Rules
 
-1. `metadata.yaml` must conform to `task-definition.schema.json`
-2. `metadata.yaml` must contain required fields: `version`, `metadata`, `description`, `processRef`, `evaluation`
-3. `processRef` must point to an existing `.process.js` file relative to the task directory
-4. `metadata.name` must match the pattern `^[a-z0-9][a-z0-9-]{2,63}$`
-5. `metadata.domain` must be one of: translation, code-refactoring, data-analysis, content-generation, research, testing, devops, other
-6. `metadata.complexity` must be one of: low, medium, high
-7. All 7 evaluation dimensions must be present (even if `notApplicable: true`)
-8. Each dimension must have a `weight` (0-1) and at least one `check`
+1. `task.yaml` must exist in the task directory
+2. `task.yaml` must contain: `name`, `domain`, `complexity`, `description`, `dimensions`, `evaluation`
+3. A `*.process.js` file must exist in the task directory
+4. `name` must match the pattern `^[a-z0-9][a-z0-9-]{2,63}$`
+5. `domain` must be one of: general, translation, data-analysis, coding, text-processing, algorithms
+6. `complexity` must be one of: low, medium, high
+7. All 7 evaluation dimensions should be present (with `weight: 0` and `notApplicable` for inapplicable ones)
+8. Evaluation weights for applicable dimensions should sum to 100
 
 ## Usage Examples
 
