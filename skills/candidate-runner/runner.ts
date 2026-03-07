@@ -63,6 +63,57 @@ export interface RunCandidateResult {
 }
 
 // ---------------------------------------------------------------------------
+// Credential Resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve harness-specific credentials from the current process environment.
+ * Only returns variables relevant to the specified harness to prevent leakage.
+ */
+export function resolveHarnessCredentials(
+  harness: import('../../shared/runner-interface.js').AgentHarness,
+): Record<string, string> {
+  const env: Record<string, string> = {};
+
+  const pick = (key: string) => {
+    const val = process.env[key];
+    if (val !== undefined && val !== '') env[key] = val;
+  };
+
+  switch (harness) {
+    case 'claude-code':
+      pick('ANTHROPIC_API_KEY');
+      pick('CLAUDE_MODEL');
+      pick('CLAUDE_MAX_TOKENS');
+      pick('CLAUDE_CODE_MAX_TURNS');
+      // Bedrock support
+      pick('CLAUDE_CODE_USE_BEDROCK');
+      pick('AWS_ACCESS_KEY_ID');
+      pick('AWS_SECRET_ACCESS_KEY');
+      pick('AWS_SESSION_TOKEN');
+      pick('AWS_REGION');
+      pick('AWS_DEFAULT_REGION');
+      // Vertex support
+      pick('CLAUDE_CODE_USE_VERTEX');
+      pick('GOOGLE_APPLICATION_CREDENTIALS');
+      pick('CLOUD_ML_REGION');
+      break;
+
+    case 'codex':
+      pick('OPENAI_API_KEY');
+      pick('OPENAI_MODEL');
+      break;
+
+    case 'custom':
+      // Custom harnesses receive no auto-inherited credentials.
+      // The caller must specify everything explicitly via config.env.
+      break;
+  }
+
+  return env;
+}
+
+// ---------------------------------------------------------------------------
 // High-level orchestration
 // ---------------------------------------------------------------------------
 
@@ -123,6 +174,7 @@ export async function runCandidate(
       ...(overrides?.volumes ?? []),
     ],
     env: {
+      ...resolveHarnessCredentials(harness),
       ...overrides?.env,
     },
     resources: overrides?.resources,

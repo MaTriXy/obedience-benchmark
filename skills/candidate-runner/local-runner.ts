@@ -22,7 +22,7 @@ import type {
   AgentHarness,
 } from '../../shared/runner-interface.js';
 import { LogCollector } from '../../shared/log-collector.js';
-import { collectArtifacts } from './runner.js';
+import { collectArtifacts, resolveHarnessCredentials } from './runner.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -132,9 +132,10 @@ export class LocalRunner implements Runner {
     // Resolve CLI command
     const { command, args } = resolveHarnessCommand(config);
 
-    // Build environment
+    // Build environment: base process env + harness-specific credentials + explicit overrides
     const env: Record<string, string> = {
       ...process.env as Record<string, string>,
+      ...resolveHarnessCredentials(config.harness),
       ...config.env,
     };
 
