@@ -1,9 +1,9 @@
 /**
  * Output-based Judge — evaluates agent output files against task.yaml criteria.
  *
- * Reads the task definition's evaluation criteria and expected output spec,
- * then programmatically verifies each check against the actual output JSON.
- * Produces ObedienceScorecard-compatible JSON files.
+ * Reads the task definition's evaluation criteria, expected output spec,
+ * and input parameters, then programmatically verifies each check against
+ * the actual output JSON. Fully parameterized — no hardcoded counts.
  *
  * Run with: npx tsx scripts/judge-outputs.ts
  */
@@ -47,6 +47,11 @@ interface JudgeScorecardOutput {
 interface TaskYaml {
   metadata: { name: string; domain: string; complexity: string };
   description: string;
+  input?: {
+    type?: string;
+    path?: string;
+    parameters?: Record<string, any>;
+  };
   expectedOutput?: {
     properties?: Record<string, number | string | boolean>;
     artifacts?: Array<{ validationRules?: string[] }>;
@@ -62,11 +67,23 @@ interface TaskYaml {
 }
 
 // ---------------------------------------------------------------------------
-// Load task definition
+// Load task definition and input
 // ---------------------------------------------------------------------------
 
 const TASK_YAML_PATH = 'plugin/skills/catalog-manager/benchmarks/full/countries-cities-attractions/task.yaml';
 const taskYaml: TaskYaml = parseYaml(readFileSync(TASK_YAML_PATH, 'utf-8'));
+
+// Load expected country list from input file
+const inputPath = taskYaml.input?.path ?? 'results/full-comparison/input/countries.json';
+const inputData = JSON.parse(readFileSync(inputPath, 'utf-8'));
+const expectedCountryNames: string[] = inputData.countries.map((c: any) => c.name);
+
+// Derive expected counts from input parameters + actual country list
+const EXPECTED_COUNTRIES = expectedCountryNames.length;
+const CITIES_PER_COUNTRY = taskYaml.input?.parameters?.citiesPerCountry ?? 3;
+const ATTRACTIONS_PER_CITY = taskYaml.input?.parameters?.attractionsPerCity ?? 3;
+const EXPECTED_CITIES = EXPECTED_COUNTRIES * CITIES_PER_COUNTRY;
+const EXPECTED_ATTRACTIONS = EXPECTED_CITIES * ATTRACTIONS_PER_CITY;
 
 // ---------------------------------------------------------------------------
 // Agent output locations
@@ -152,41 +169,50 @@ function normalizeOutput(raw: Record<string, unknown>): NormalizedOutput {
 }
 
 // ---------------------------------------------------------------------------
-// Dimension evaluators
+// Dimension evaluators — fully parameterized
 // ---------------------------------------------------------------------------
 
 function evaluateCompleteness(output: NormalizedOutput, checks: string[]): DimensionResult {
   const results: CheckResult[] = [];
 
-  // Check 1: Exactly 3 countries
-  const countryCount = output.countries.length;
-  const expectedCountries = ['Japan', 'Italy', 'Brazil'];
+  // Check 1: All countries from input present
   const foundCountries = output.countries.map(c => c.name);
-  const hasAllCountries = expectedCountries.every(ec =>
+  const matchedCountries = expectedCountryNames.filter(ec =>
     foundCountries.some(fc => fc.toLowerCase().includes(ec.toLowerCase()))
   );
+  const missingCountries = expectedCountryNames.filter(ec =>
+    !foundCountries.some(fc => fc.toLowerCase().includes(ec.toLowerCase()))
+  );
   results.push({
-    check: checks[0] ?? 'Exactly 3 countries present',
-    passed: countryCount === 3 && hasAllCountries,
-    detail: `Found ${countryCount} countries: [${foundCountries.join(', ')}]. Expected: [${expectedCountries.join(', ')}]`,
+    check: checks[0] ?? 'All countries from input present',
+    passed: matchedCountries.length === EXPECTED_COUNTRIES,
+    detail: matchedCountries.length === EXPECTED_COUNTRIES
+      ? `All ${EXPECTED_COUNTRIES} countries present`
+      : `Found ${matchedCountries.length}/${EXPECTED_COUNTRIES}. Missing: [${missingCountries.slice(0, 10).join(', ')}${missingCountries.length > 10 ? '...' : ''}]`,
   });
 
-  // Check 2: Each country has exactly 3 cities
+  // Check 2: Each country has exactly N cities
   const cityCounts = output.countries.map(c => c.cities.length);
-  const allHave3Cities = cityCounts.every(n => n === 3);
+  const allHaveNCities = cityCounts.every(n => n === CITIES_PER_COUNTRY);
+  const wrongCityCounts = cityCounts.filter(n => n !== CITIES_PER_COUNTRY).length;
   results.push({
-    check: checks[1] ?? 'Each country has exactly 3 cities',
-    passed: allHave3Cities,
-    detail: `City counts per country: [${cityCounts.join(', ')}]`,
+    check: checks[1] ?? `Each country has exactly ${CITIES_PER_COUNTRY} cities`,
+    passed: allHaveNCities,
+    detail: allHaveNCities
+      ? `All ${output.countries.length} countries have ${CITIES_PER_COUNTRY} cities`
+      : `${wrongCityCounts} countries have wrong city count. Distribution: [${cityCounts.join(', ')}]`,
   });
 
-  // Check 3: Each city has exactly 3 attractions
+  // Check 3: Each city has exactly N attractions
   const attractionCounts = output.countries.flatMap(c => c.cities.map(city => city.attractions.length));
-  const allHave3Attractions = attractionCounts.every(n => n === 3);
+  const allHaveNAttractions = attractionCounts.every(n => n === ATTRACTIONS_PER_CITY);
+  const wrongAttrCounts = attractionCounts.filter(n => n !== ATTRACTIONS_PER_CITY).length;
   results.push({
-    check: checks[2] ?? 'Each city has exactly 3 attractions',
-    passed: allHave3Attractions,
-    detail: `Attraction counts per city: [${attractionCounts.join(', ')}]`,
+    check: checks[2] ?? `Each city has exactly ${ATTRACTIONS_PER_CITY} attractions`,
+    passed: allHaveNAttractions,
+    detail: allHaveNAttractions
+      ? `All ${attractionCounts.length} cities have ${ATTRACTIONS_PER_CITY} attractions`
+      : `${wrongAttrCounts} cities have wrong attraction count`,
   });
 
   // Check 4: Every attraction has non-empty themes
@@ -217,7 +243,6 @@ function evaluateCompleteness(output: NormalizedOutput, checks: string[]): Dimen
 
   // Check 7: Sentiment histogram/distribution
   const hasSentimentHist = output.globalSummary?.sentimentHistogram != null && Object.keys(output.globalSummary.sentimentHistogram).length > 0;
-  // Also check for alternative formats
   const rawSummary = (output.raw as any).globalSummary ?? (output.raw as any).global_summary;
   const hasSentimentPercentage = rawSummary?.sentiment_percentage != null || rawSummary?.sentimentPercentage != null;
   results.push({
@@ -228,13 +253,14 @@ function evaluateCompleteness(output: NormalizedOutput, checks: string[]): Dimen
       : hasSentimentPercentage ? 'Sentiment percentage distribution found' : 'No sentiment distribution found',
   });
 
-  // Check 8: Total counts
+  // Check 8: Total counts match expected
   const totalAttractionCount = allAttractions.length;
   const totalCityCount = output.countries.reduce((s, c) => s + c.cities.length, 0);
+  const countryCount = output.countries.length;
   results.push({
-    check: checks[7] ?? 'Total entity counts: 3 countries, 9 cities, 27 attractions',
-    passed: countryCount === 3 && totalCityCount === 9 && totalAttractionCount === 27,
-    detail: `Counts: ${countryCount} countries, ${totalCityCount} cities, ${totalAttractionCount} attractions`,
+    check: checks[7] ?? `Total entity counts match expected (${EXPECTED_COUNTRIES} countries, ${EXPECTED_CITIES} cities, ${EXPECTED_ATTRACTIONS} attractions)`,
+    passed: countryCount === EXPECTED_COUNTRIES && totalCityCount === EXPECTED_CITIES && totalAttractionCount === EXPECTED_ATTRACTIONS,
+    detail: `Counts: ${countryCount}/${EXPECTED_COUNTRIES} countries, ${totalCityCount}/${EXPECTED_CITIES} cities, ${totalAttractionCount}/${EXPECTED_ATTRACTIONS} attractions`,
   });
 
   return buildDimensionResult('completeness', results, checks);
@@ -242,39 +268,46 @@ function evaluateCompleteness(output: NormalizedOutput, checks: string[]): Dimen
 
 function evaluateOrdering(output: NormalizedOutput, checks: string[]): DimensionResult {
   const results: CheckResult[] = [];
-  const expectedOrder = ['Japan', 'Italy', 'Brazil'];
   const actualOrder = output.countries.map(c => c.name);
 
   // Check 1: Countries in input order
-  const orderCorrect = expectedOrder.every((expected, i) =>
-    actualOrder[i]?.toLowerCase().includes(expected.toLowerCase())
-  );
+  let orderCorrect = true;
+  let firstMismatch = '';
+  for (let i = 0; i < Math.min(expectedCountryNames.length, actualOrder.length); i++) {
+    if (!actualOrder[i]?.toLowerCase().includes(expectedCountryNames[i].toLowerCase())) {
+      orderCorrect = false;
+      firstMismatch = `Position ${i}: expected "${expectedCountryNames[i]}", got "${actualOrder[i]}"`;
+      break;
+    }
+  }
+  if (actualOrder.length !== expectedCountryNames.length) orderCorrect = false;
   results.push({
     check: checks[0] ?? 'Countries in input order',
     passed: orderCorrect,
-    detail: `Expected order: [${expectedOrder.join(', ')}], got: [${actualOrder.join(', ')}]`,
+    detail: orderCorrect
+      ? `All ${EXPECTED_COUNTRIES} countries in correct order`
+      : firstMismatch || `Count mismatch: ${actualOrder.length} vs ${expectedCountryNames.length}`,
   });
 
   // Check 2: Cities within each country are listed
   const allCitiesPresent = output.countries.every(c => c.cities.length > 0);
+  const countriesWithCities = output.countries.filter(c => c.cities.length > 0).length;
   results.push({
     check: checks[1] ?? 'Cities within each country are listed',
     passed: allCitiesPresent,
-    detail: output.countries.map(c => `${c.name}: ${c.cities.map(ci => ci.name).join(', ')}`).join('; '),
+    detail: `${countriesWithCities}/${output.countries.length} countries have cities`,
   });
 
   // Check 3: Attractions within each city are listed
-  const allAttractionsPresent = output.countries.every(c =>
-    c.cities.every(city => city.attractions.length > 0)
-  );
+  const allCities = output.countries.flatMap(c => c.cities);
+  const citiesWithAttractions = allCities.filter(city => city.attractions.length > 0).length;
   results.push({
     check: checks[2] ?? 'Attractions within each city are listed',
-    passed: allAttractionsPresent,
-    detail: `${output.countries.flatMap(c => c.cities).filter(city => city.attractions.length > 0).length}/${output.countries.flatMap(c => c.cities).length} cities have attractions`,
+    passed: citiesWithAttractions === allCities.length,
+    detail: `${citiesWithAttractions}/${allCities.length} cities have attractions`,
   });
 
   // Check 4: Data collection precedes aggregation
-  // We infer this from structure: country data objects exist AND global summary exists
   const hasCountryData = output.countries.length > 0 && output.countries[0].cities.length > 0;
   const hasAggregation = output.globalSummary != null;
   results.push({
@@ -300,39 +333,39 @@ function evaluateGranularity(output: NormalizedOutput, checks: string[]): Dimens
   const results: CheckResult[] = [];
 
   // Check 1: Separate country objects
-  const separateCountries = output.countries.length === 3 && output.countries.every(c => c.name);
+  const separateCountries = output.countries.length > 0 && output.countries.every(c => c.name);
   results.push({
     check: checks[0] ?? 'Each country as separate unit',
     passed: separateCountries,
-    detail: `${output.countries.length} distinct country objects: [${output.countries.map(c => c.name).join(', ')}]`,
+    detail: `${output.countries.length} distinct country objects`,
   });
 
   // Check 2: Separate city objects within countries
   const separateCities = output.countries.every(c =>
     c.cities.length > 0 && c.cities.every(city => city.name)
   );
+  const totalCities = output.countries.reduce((s, c) => s + c.cities.length, 0);
   results.push({
     check: checks[1] ?? 'Each city processed separately within its country',
     passed: separateCities,
-    detail: output.countries.map(c => `${c.name}: [${c.cities.map(ci => ci.name).join(', ')}]`).join('; '),
+    detail: `${totalCities} distinct city objects across ${output.countries.length} countries`,
   });
 
   // Check 3: Separate attraction objects within cities
+  const allAttractions = output.countries.flatMap(c => c.cities.flatMap(ci => ci.attractions));
   const separateAttractions = output.countries.every(c =>
     c.cities.every(city => city.attractions.length > 0 && city.attractions.every(a => a.name))
   );
   results.push({
     check: checks[2] ?? 'Each attraction processed separately within its city',
     passed: separateAttractions,
-    detail: `${output.countries.flatMap(c => c.cities.flatMap(ci => ci.attractions)).length} distinct attraction objects`,
+    detail: `${allAttractions.length} distinct attraction objects`,
   });
 
   // Check 4: Per-attraction review data (not bulk)
-  const allAttractions = output.countries.flatMap(c => c.cities.flatMap(city => city.attractions));
   const perAttractionThemes = allAttractions.every(a => a.themes.length > 0);
-  // Check that themes aren't identical across all attractions (would suggest bulk processing)
   const uniqueThemeSets = new Set(allAttractions.map(a => JSON.stringify(a.themes.sort())));
-  const themesDiverse = uniqueThemeSets.size > allAttractions.length * 0.5; // at least half have unique theme combos
+  const themesDiverse = uniqueThemeSets.size > allAttractions.length * 0.5;
   results.push({
     check: checks[3] ?? 'Review data is per-attraction, not bulk-summarized',
     passed: perAttractionThemes && themesDiverse,
@@ -356,28 +389,27 @@ function evaluateAggregation(output: NormalizedOutput, checks: string[]): Dimens
   const results: CheckResult[] = [];
 
   const allAttractions = output.countries.flatMap(c => c.cities.flatMap(city => city.attractions));
-  const allThemes = allAttractions.flatMap(a => a.themes);
 
   // Check 1: Theme histogram aggregates across ALL attractions
   const themeHist = output.globalSummary?.themeHistogram;
   const histThemeCount = themeHist ? Object.values(themeHist).reduce((s: number, v: number) => s + v, 0) : 0;
-  // The histogram should reference themes from attractions across all countries
-  const countriesRepresented = themeHist ? (() => {
+  // Check cross-country coverage by sampling a few countries
+  const crossCountry = themeHist ? (() => {
     const themes = Object.keys(themeHist).map(t => t.toLowerCase());
-    // Check if themes from different countries' attractions appear
-    const japanThemes = output.countries.find(c => c.name.toLowerCase().includes('japan'))
+    // Sample first and last country to verify cross-country aggregation
+    const firstCountryThemes = output.countries[0]
       ?.cities.flatMap(ci => ci.attractions.flatMap(a => a.themes.map(t => t.toLowerCase()))) ?? [];
-    const brazilThemes = output.countries.find(c => c.name.toLowerCase().includes('brazil'))
+    const lastCountryThemes = output.countries[output.countries.length - 1]
       ?.cities.flatMap(ci => ci.attractions.flatMap(a => a.themes.map(t => t.toLowerCase()))) ?? [];
-    const hasJapan = japanThemes.some(t => themes.some(ht => ht.includes(t) || t.includes(ht)));
-    const hasBrazil = brazilThemes.some(t => themes.some(ht => ht.includes(t) || t.includes(ht)));
-    return hasJapan && hasBrazil;
+    const hasFirst = firstCountryThemes.some(t => themes.some(ht => ht.includes(t) || t.includes(ht)));
+    const hasLast = lastCountryThemes.some(t => themes.some(ht => ht.includes(t) || t.includes(ht)));
+    return hasFirst && hasLast;
   })() : false;
   results.push({
     check: checks[0] ?? 'Theme histogram aggregates across ALL attractions',
-    passed: themeHist != null && countriesRepresented,
+    passed: themeHist != null && crossCountry,
     detail: themeHist
-      ? `Histogram has ${Object.keys(themeHist).length} themes, total count ${histThemeCount}, cross-country: ${countriesRepresented}`
+      ? `Histogram has ${Object.keys(themeHist).length} themes, total count ${histThemeCount}, cross-country: ${crossCountry}`
       : 'No theme histogram found',
   });
 
@@ -392,15 +424,14 @@ function evaluateAggregation(output: NormalizedOutput, checks: string[]): Dimens
   // Check 3: Sentiment covers all attractions
   const sentHist = output.globalSummary?.sentimentHistogram;
   const sentTotal = sentHist ? Object.values(sentHist).reduce((s: number, v: number) => s + v, 0) : 0;
-  // Also check for percentage-based format
   const rawSummary = (output.raw as any).globalSummary ?? (output.raw as any).global_summary;
   const sentPercentage = rawSummary?.sentiment_percentage ?? rawSummary?.sentimentPercentage;
-  const hasSentCoverage = sentTotal >= 27 || sentPercentage != null;
+  const hasSentCoverage = sentTotal >= EXPECTED_ATTRACTIONS || sentPercentage != null;
   results.push({
-    check: checks[2] ?? 'Sentiment covers all 27 attractions',
+    check: checks[2] ?? `Sentiment covers all ${EXPECTED_ATTRACTIONS} attractions`,
     passed: hasSentCoverage,
     detail: sentHist
-      ? `Sentiment histogram total: ${sentTotal} (expected 27)`
+      ? `Sentiment histogram total: ${sentTotal} (expected ${EXPECTED_ATTRACTIONS})`
       : sentPercentage ? 'Sentiment coverage via percentage distribution' : 'No sentiment histogram',
   });
 
@@ -409,16 +440,11 @@ function evaluateAggregation(output: NormalizedOutput, checks: string[]): Dimens
   const hasTotals = gs != null && (
     gs.totalCountries != null || gs.totalCities != null || gs.totalAttractions != null
   );
-  const totalsCorrect = hasTotals && (
-    (gs!.totalCountries === 3 || gs!.totalCountries == null)
-    && (gs!.totalCities === 9 || gs!.totalCities == null)
-    && (gs!.totalAttractions === 27 || gs!.totalAttractions == null)
-  );
   results.push({
     check: checks[3] ?? 'Global summary includes total counts',
     passed: hasTotals,
     detail: hasTotals
-      ? `Totals: ${gs!.totalCountries ?? '?'} countries, ${gs!.totalCities ?? '?'} cities, ${gs!.totalAttractions ?? '?'} attractions${totalsCorrect ? ' (correct)' : ' (some incorrect)'}`
+      ? `Totals: ${gs!.totalCountries ?? '?'} countries, ${gs!.totalCities ?? '?'} cities, ${gs!.totalAttractions ?? '?'} attractions`
       : 'No total counts in global summary',
   });
 
@@ -483,6 +509,7 @@ console.log('='.repeat(70));
 console.log('  OBEDIENCE BENCHMARK JUDGE — Output Evaluation');
 console.log('  Task: ' + taskYaml.metadata.name);
 console.log('  Criteria source: ' + TASK_YAML_PATH);
+console.log(`  Expected: ${EXPECTED_COUNTRIES} countries, ${EXPECTED_CITIES} cities, ${EXPECTED_ATTRACTIONS} attractions`);
 console.log('='.repeat(70));
 console.log('');
 

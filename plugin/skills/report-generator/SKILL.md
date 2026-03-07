@@ -2,43 +2,82 @@
 
 ## Purpose
 
-Compile judge scorecards from one or more benchmark runs into human-readable reports with per-task breakdowns, dimension analysis, evidence citations, and aggregate leaderboard rankings.
+Compile judge scorecards from one or more benchmark runs into human-readable HTML reports with per-task breakdowns, dimension analysis, evidence citations, agent output comparison, and aggregate leaderboard rankings. Supports comparison between two agents (primary vs baseline) and multi-task index pages.
 
 ## When to Use
 
 - After the judge has scored one or more task runs
 - When the benchmarker completes a full benchmark suite
 - When a user wants a summary of results across runs or agents
+- When comparing two agents (e.g., babysitter-orchestrated vs pure-claude-code)
+
+## Report Types
+
+### Comparison Report (per-task)
+Side-by-side analysis of two agents' performance on a single task:
+- Task overview with description, prescribed process steps, and evaluation criteria
+- Dimension radar chart (only applicable dimensions shown)
+- Dimension score bars (only applicable dimensions, N/A dimensions hidden)
+- Judge evidence per dimension with pass/fail per check for both agents
+- Agent output JSON snippets with structural diff analysis
+- Head-to-head comparison table (applicable dimensions only)
+- Leaderboard ranking
+
+### Individual Report (per-agent)
+Single agent's performance on a task with the same sections minus comparison.
+
+### Aggregate Index
+Multi-task summary linking to individual comparison reports:
+- Overall scores with delta
+- Task summary table
+- Per-task cards with scores and links
 
 ## Inputs
 
-- **scorecards**: One or more `ObedienceScorecard` objects
-- **format**: `markdown` (default), `json`, or `both`
-- **outputDir**: Where to write reports (defaults to `results/<run-id>/`)
+### HTML Report (`renderHtmlReport`)
+- **report**: `BenchmarkReport` object (primary agent)
+- **options**: `HtmlReportOptions`
+  - `compareWith`: Optional `BenchmarkReport` for baseline agent
+  - `title`: Override report title
+  - `taskDescriptions`: Task descriptions keyed by taskName
+  - `prescribedSteps`: Ordered process steps per task
+  - `evaluationCriteria`: Per-dimension criteria with weights
+  - `agentOutputSamples`: Primary agent's JSON output per task
+  - `baselineOutputSamples`: Baseline agent's JSON output per task
 
-## Process
+### Index Page (`renderIndexHtml`)
+- **entries**: `IndexEntry[]` with per-task scores and report URLs
+- **options**: `IndexOptions` with agent IDs and overall scores
 
-1. Load all scorecards for the benchmark run
-2. For each task, generate a detail section:
-   - Overall score and per-dimension breakdown
-   - Highlights (dimensions scored 80+) and issues (dimensions scored below 50)
-   - Evidence excerpts for deductions
-   - Prescribed vs observed step comparison
-3. Generate aggregate analysis:
-   - Average scores across all tasks per dimension
-   - Strongest and weakest dimensions
-   - Common obedience patterns and anti-patterns
-4. Update the leaderboard (`leaderboard/leaderboard.json`):
-   - Insert or update the agent's entry
-   - Recompute rankings
-5. Write output files
+## Dimension Handling
 
-## Output
+- **Applicable dimensions** (weight > 0, not marked `notApplicable`): Shown with scores, bars, radar points, and evidence
+- **N/A dimensions** (weight = 0 or `notApplicable: true`): Completely hidden from all visualizations — radar chart, score bars, comparison table, and evidence sections
+- Strongest/weakest dimension computed only from applicable dimensions
 
-- `report.md` -- Full markdown report with tables, per-task details, and analysis
-- `report.json` -- Structured `BenchmarkReport` object
-- `leaderboard/leaderboard.json` -- Updated leaderboard
+## Output Files
+
+| File | Description |
+|------|-------------|
+| `<task>/comparison-report.html` | Per-task comparison report |
+| `pure-claude/report.html` | Baseline agent individual report |
+| `babysitter/report.html` | Primary agent individual report |
+| `index.html` | Multi-task aggregate index |
+| `comparison-report.html` | Compatibility copy of first task's comparison |
 
 ## Key Files
 
-- `skills/obedience-types/scripts/types.ts` -- `BenchmarkReport`, `Leaderboard`, `LeaderboardEntry` types
+| File | Purpose |
+|------|---------|
+| `skills/report-generator/scripts/html-report.ts` | Core HTML rendering functions |
+| `scripts/gen-comparison-html-report.ts` | Comparison report generation pipeline |
+| `skills/obedience-types/scripts/types.ts` | `BenchmarkReport`, `ObedienceScorecard`, `DimensionScore` types |
+
+## Running
+
+```bash
+# Generate comparison reports from judge scorecards
+npx tsx scripts/gen-comparison-html-report.ts
+```
+
+Requires judge scorecards at `results/full-comparison/<agent>/scorecard.json` (produced by `scripts/judge-outputs.ts`).

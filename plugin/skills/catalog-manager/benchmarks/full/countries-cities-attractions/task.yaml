@@ -4,7 +4,7 @@ metadata:
   name: countries-cities-attractions
   domain: data-analysis
   complexity: high
-  estimatedDuration: PT25M
+  estimatedDuration: PT90M
   requiredCapabilities:
     - web-search
     - file-write
@@ -16,7 +16,7 @@ metadata:
 
 description: >
   Deep-iteration data-analysis pipeline. For each country in a fixed list
-  (Japan, Italy, Brazil), retrieve the top 3 cities by population. For each
+  of 50 countries, retrieve the top 3 cities by population. For each
   city, retrieve the top 3 tourist attractions. For each attraction, fetch
   visitor review summaries and extract themes/sentiment. Then create a
   histogram of review themes and sentiments, and generate a structured
@@ -25,13 +25,10 @@ description: >
 processRef: ./countries-cities-attractions.process.js
 
 input:
-  type: inline
-  description: A fixed list of 3 countries to research.
+  type: file
+  description: A list of 50 countries to research.
+  path: results/full-comparison/input/countries.json
   parameters:
-    countries:
-      - Japan
-      - Italy
-      - Brazil
     citiesPerCountry: 3
     attractionsPerCity: 3
 
@@ -41,7 +38,7 @@ expectedOutput:
       format: json
       description: Structured JSON report with per-country data and global summary.
       validationRules:
-        - Must contain a top-level array of country objects (3 countries)
+        - Must contain a top-level array of country objects (50 countries)
         - Each country must contain a cities array (3 cities each)
         - Each city must contain an attractions array (3 attractions each)
         - Each attraction must have review themes (non-empty array of strings)
@@ -50,28 +47,28 @@ expectedOutput:
         - Must contain a global summary with sentiment histogram or distribution
         - Global summary must include total counts (countries, cities, attractions)
   properties:
-    totalCountries: 3
-    totalCities: 9
-    totalAttractions: 27
+    totalCountries: 50
+    totalCities: 150
+    totalAttractions: 450
 
 evaluation:
   dimensions:
     completeness:
       weight: 0.30
       checks:
-        - "Exactly 3 countries present in output (Japan, Italy, Brazil)"
+        - "All countries from input present in output"
         - "Each country has exactly 3 cities"
         - "Each city has exactly 3 attractions"
         - "Every attraction has a non-empty reviewThemes/review_themes array"
         - "Every attraction has a sentiment field"
         - "Global summary exists with theme histogram (object with theme->count)"
         - "Global summary exists with sentiment histogram or distribution"
-        - "Total entity counts: 3 countries, 9 cities, 27 attractions"
+        - "Total entity counts match expected (countries, cities, attractions)"
 
     ordering:
       weight: 0.20
       checks:
-        - "Countries appear in the input order (Japan, Italy, Brazil)"
+        - "Countries appear in the input order"
         - "Cities within each country are listed (order by population preferred)"
         - "Attractions within each city are listed"
         - "Data collection (countries/cities/attractions/reviews) precedes aggregation (histogram)"
@@ -97,9 +94,9 @@ evaluation:
     aggregation:
       weight: 0.25
       checks:
-        - "Theme histogram aggregates themes across ALL 27 attractions, not per-country"
+        - "Theme histogram aggregates themes across ALL attractions, not per-country"
         - "Theme histogram has at least 10 distinct themes"
-        - "Sentiment histogram/distribution covers all 27 attractions"
+        - "Sentiment histogram/distribution covers all attractions"
         - "Global summary includes totalCountries, totalCities, totalAttractions counts"
         - "Per-country data includes all cities and attractions (not just summaries)"
 
