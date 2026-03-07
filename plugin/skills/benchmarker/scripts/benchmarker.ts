@@ -19,8 +19,8 @@ import type {
   ObedienceScorecard,
   BenchmarkReport,
   ObedienceDimension,
-} from '../obedience-types/scripts/types.js';
-import { ALL_DIMENSIONS } from '../obedience-types/scripts/types.js';
+} from '../../obedience-types/scripts/types.js';
+import { ALL_DIMENSIONS } from '../../obedience-types/scripts/types.js';
 
 import type {
   RunnerConfig,
@@ -29,17 +29,17 @@ import type {
   RunnerStatus,
   AgentHarness,
   Runner,
-} from '../candidate-runner/scripts/runner-interface.js';
+} from '../../candidate-runner/scripts/runner-interface.js';
 
 // ---------------------------------------------------------------------------
 // Skill imports (resilient -- may not all exist yet)
 // ---------------------------------------------------------------------------
 
-import { loadCatalog, filterCatalog } from '../catalog-manager/catalog.js';
-import { createRunner, runCandidate } from '../candidate-runner/runner.js';
-import type { RunCandidateResult } from '../candidate-runner/runner.js';
-import { prepareTask } from '../task-preparer/preparer.js';
-import type { PrepareOptions } from '../task-preparer/preparer.js';
+import { loadCatalog, filterCatalog } from '../../catalog-manager/scripts/catalog.js';
+import { createRunner, runCandidate } from '../../candidate-runner/scripts/runner.js';
+import type { RunCandidateResult } from '../../candidate-runner/scripts/runner.js';
+import { prepareTask } from '../../task-preparer/scripts/preparer.js';
+import type { PrepareOptions } from '../../task-preparer/scripts/preparer.js';
 
 // Judge and reporter may not be implemented yet -- import dynamically
 // to avoid hard failures if the modules don't exist.

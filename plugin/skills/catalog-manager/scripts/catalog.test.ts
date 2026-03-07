@@ -19,7 +19,7 @@ import {
   resetSchemaCache,
 } from './catalog.js';
 
-import type { CatalogEntry, CatalogFilter, ObedienceDimension } from '../obedience-types/scripts/types.js';
+import type { CatalogEntry, CatalogFilter, ObedienceDimension } from '../../obedience-types/scripts/types.js';
 
 // ---------------------------------------------------------------------------
 // Helpers — temporary task fixtures

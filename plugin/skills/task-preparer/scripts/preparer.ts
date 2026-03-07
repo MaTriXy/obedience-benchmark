@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
 
-import type { CatalogEntry, PreparedTask } from '../obedience-types/scripts/types.js';
+import type { CatalogEntry, PreparedTask } from '../../obedience-types/scripts/types.js';
 
 import {
   generateBook,

@@ -73,7 +73,7 @@ example use-case, and exercised dimensions.
 
 | File | Purpose |
 |------|---------|
-| `skills/task-creator/creator.ts` | Core logic: `getTemplates()`, `generateTask()`, `validateGeneratedTask()`, `saveTask()` |
+| `skills/task-creator/scripts/creator.ts` | Core logic: `getTemplates()`, `generateTask()`, `validateGeneratedTask()`, `saveTask()` |
 | `skills/task-creator/templates/sequential.template.js` | Sequential pipeline template |
 | `skills/task-creator/templates/map-reduce.template.js` | Parallel fan-out/fan-in template |
 | `skills/task-creator/templates/iterative.template.js` | Loop with convergence template |

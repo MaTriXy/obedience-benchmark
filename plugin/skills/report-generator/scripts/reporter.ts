@@ -12,8 +12,9 @@ import type {
   BenchmarkReport,
   Leaderboard,
   LeaderboardEntry,
-} from '../obedience-types/scripts/types.js';
-import { ALL_DIMENSIONS } from '../obedience-types/scripts/types.js';
+} from '../../obedience-types/scripts/types.js';
+import { ALL_DIMENSIONS } from '../../obedience-types/scripts/types.js';
+import { renderHtmlReport } from './html-report.js';
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -28,14 +29,16 @@ export interface ReportParams {
   taskMetadata?: Record<string, { domain: string; complexity: string }>;
   outputDir: string;
   benchmarkVersion?: string;
+  compareWith?: BenchmarkReport;
 }
 
 /**
- * Generate markdown report + JSON report + update leaderboard.
+ * Generate markdown report + HTML report + JSON report + update leaderboard.
  */
 export async function generateReport(params: ReportParams): Promise<{
   report: BenchmarkReport;
   markdownPath: string;
+  htmlPath: string;
   jsonPath: string;
   leaderboardPath: string;
 }> {
@@ -57,10 +60,13 @@ export async function generateReport(params: ReportParams): Promise<{
   await mkdir(outputDir, { recursive: true });
 
   const markdownPath = join(outputDir, 'report.md');
+  const htmlPath = join(outputDir, 'report.html');
   const jsonPath = join(outputDir, 'report.json');
 
   const markdown = renderMarkdown(report);
+  const html = renderHtmlReport(report, { compareWith: params.compareWith });
   await writeFile(markdownPath, markdown, 'utf-8');
+  await writeFile(htmlPath, html, 'utf-8');
   await writeFile(jsonPath, JSON.stringify(report, null, 2), 'utf-8');
 
   // Update leaderboard
@@ -79,7 +85,7 @@ export async function generateReport(params: ReportParams): Promise<{
   );
   await writeFile(leaderboardPath, JSON.stringify(leaderboard, null, 2), 'utf-8');
 
-  return { report, markdownPath, jsonPath, leaderboardPath };
+  return { report, markdownPath, htmlPath, jsonPath, leaderboardPath };
 }
 
 // ---------------------------------------------------------------------------

@@ -53,9 +53,9 @@ A `RunnerResult` object (see `scripts/runner-interface.ts`) containing:
 
 | File | Description |
 |------|-------------|
-| `runner.ts` | Factory function `createRunner()` and orchestration helper `runCandidate()` |
-| `local-runner.ts` | `LocalRunner` -- subprocess-based execution backend |
-| `docker-runner.ts` | `DockerRunner` -- container-based execution backend |
+| `scripts/runner.ts` | Factory function `createRunner()` and orchestration helper `runCandidate()` |
+| `scripts/local-runner.ts` | `LocalRunner` -- subprocess-based execution backend |
+| `scripts/docker-runner.ts` | `DockerRunner` -- container-based execution backend |
 | `Dockerfile.template` | Base Dockerfile used to build candidate agent images |
 | `scripts/runner-interface.ts` | `Runner`, `RunnerConfig`, `RunnerResult` type definitions |
 | `scripts/log-collector.ts` | `LogCollector` class for structured event capture |
@@ -74,16 +74,37 @@ A `RunnerResult` object (see `scripts/runner-interface.ts`) containing:
 
 Standard non-interactive mode. Runs `claude --print --output-format json --verbose`, piping the task prompt to stdin. Best for simple, single-turn benchmark tasks.
 
+#### Running as a Background Agent
+
+When running pure Claude Code from within an existing Claude Code session (e.g., from the benchmarker), use the **Agent tool** with a detailed prompt containing the full task description. The Agent tool spawns a subagent that runs autonomously and returns a summary when complete.
+
+**Key behavior:**
+- The subagent has its own context window and tool access
+- It runs in the same working directory and inherits environment variables
+- Use `run_in_background: true` to run it concurrently with other work
+- The subagent completes independently — you are notified when it finishes
+- Output artifacts must be written to disk by the subagent since only the text summary is returned
+
+**Example pattern for benchmarking:**
+```typescript
+// Launch pure-claude agent via Agent tool
+Agent({
+  description: "Pure Claude: benchmark task",
+  prompt: `Execute the following benchmark task...\n${taskPrompt}\nWrite all outputs to ${outputDir}`,
+  run_in_background: true,
+});
+```
+
 ### Claude Code with Babysitter (`claude-code-babysitter`)
 
-Runs Claude Code in interactive mode with the babysitter plugin orchestrating the task via `/babysitter:yolo`. This mode is used when you want to test the agent's obedience under a more realistic orchestration scenario where the agent receives the task as a babysitter-managed process.
+Runs Claude Code in interactive mode with the babysitter plugin orchestrating the task via `/babysitter:yolo`. This mode tests the agent's obedience under structured orchestration where babysitter enforces step-by-step execution with journaled state.
 
 **How it works:**
 
 1. The runner launches `claude` (interactive, not `--print`) in the prepared workspace
 2. The task prompt is prefixed with `/babysitter:yolo` so babysitter takes over orchestration
 3. Babysitter creates a process from the task prompt and runs it non-interactively (yolo mode skips all breakpoints)
-4. The full session — including babysitter's orchestration events, agent tool calls, and intermediate outputs — is captured in the session logs
+4. The babysitter stop-hook drives the iteration loop: after each task effect is resolved, the session stops and the hook restarts it for the next iteration
 5. On completion, babysitter emits a completion proof and the session ends
 
 **Prerequisites:**
@@ -98,7 +119,7 @@ const config: RunnerConfig = {
   taskPrompt: `/babysitter:yolo ${originalTaskPrompt}`,
   systemPrompt: 'Follow the prescribed process exactly as described.',
   plugins: [{ name: 'babysitter' }],
-  timeoutMs: 600_000,  // babysitter runs take longer; 10min default
+  timeoutMs: 900_000,  // babysitter runs take longer; 15min default
   env: {
     // credentials inherited (see Credentials section)
   },
@@ -109,6 +130,33 @@ const config: RunnerConfig = {
 - When the benchmark task has a multi-step process that benefits from orchestration
 - When testing how the agent handles structured process execution under babysitter
 - When you want richer session logs with orchestration events for the judge to evaluate
+
+### Caveats and Limitations for Local Mode
+
+#### Pure Claude Code (local)
+
+- **No process enforcement**: The agent executes the task as a single continuous session. There are no distinct step IDs, iteration metadata, or journal events — ordering and granularity are implicit, not enforced.
+- **Single context window**: Very long tasks may hit context limits. The agent decides autonomously how to chunk work, which can differ from the prescribed process.
+- **Background agent limitations**: When launched via the Agent tool as a background subagent, only the final text summary is returned — intermediate tool call details are not directly accessible. Output artifacts must be written to disk by the subagent.
+- **Richer output data**: Pure Claude tends to produce more nuanced and detailed outputs (e.g., varied sentiment categories, additional fields like visitor tips) since it has full autonomy over data structure.
+
+#### Babysitter-Orchestrated (local)
+
+- **Cannot run in a subagent**: The babysitter skill (`/babysitter:yolo`) **must** be invoked via the `Skill` tool in the main session — it cannot be delegated to a background Agent or subagent. The stop-hook loop requires the main session's hook infrastructure.
+- **Stop-hook driven**: The iteration loop is driven by the babysitter stop-hook, not by the agent calling `run:iterate` multiple times in a single turn. After each effect is posted, the session must stop so the hook can restart it. This means babysitter runs take longer wall-clock time.
+- **SDK version pinning**: The babysitter SDK version is read from the plugin manifest. If the version is removed from npm, the CLI commands will fail. Use `npx -y @a5c-ai/babysitter-sdk@latest` as a fallback.
+- **State recovery**: If the run enters a bad state (corrupted journal, failed effects), recovery involves analyzing journal events, removing bad entries, and rebuilding the state cache. Use `babysitter:doctor` to diagnose.
+- **One iteration per session turn**: Running multiple `run:iterate` calls in a single session turn bypasses the hook loop and breaks the orchestration model. Always stop after each iteration.
+- **Higher granularity scores**: Babysitter runs produce distinct step IDs, effect IDs, and journal events for every task, which significantly improves granularity and ordering scores compared to pure Claude.
+
+#### Running Both for Comparison
+
+When comparing pure Claude vs babysitter-orchestrated execution:
+
+1. **Launch pure Claude first** as a background Agent (it runs autonomously)
+2. **Then invoke babysitter** via `Skill` tool with `/babysitter:yolo` (it takes over the main session via the stop-hook loop)
+3. After both complete, judge each run's output against the prescribed process
+4. The comparison report should show babysitter as the primary (improved) agent and pure Claude as the baseline
 
 ## Credentials and Model Configuration
 
@@ -153,7 +201,7 @@ Custom harnesses receive all explicitly configured `env` variables plus any vari
 
 ### How Credentials Are Applied
 
-The `runCandidate()` function in `runner.ts` builds the environment by merging:
+The `runCandidate()` function in `scripts/runner.ts` builds the environment by merging:
 
 ```typescript
 const env: Record<string, string> = {
@@ -206,7 +254,7 @@ This means **no manual API key configuration is needed** when running benchmarks
 4. Collect partial results up to the point of termination
 5. Mark result status as `timeout`
 
-**Note:** Babysitter-mode runs should use a longer timeout (10-15 minutes) since babysitter's orchestration loop adds overhead.
+**Note:** Babysitter-mode runs should use a longer timeout (15-20 minutes) since babysitter's orchestration loop adds overhead from stop-hook cycling and SDK CLI invocations per iteration.
 
 ## Docker Mode Details
 

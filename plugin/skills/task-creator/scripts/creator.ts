@@ -16,7 +16,7 @@ const Ajv2020 = _Ajv2020 as unknown as typeof _Ajv2020.default;
 type Ajv2020Instance = InstanceType<typeof Ajv2020>;
 import YAML from 'yaml';
 
-import type { ObedienceDimension } from '../obedience-types/scripts/types.js';
+import type { ObedienceDimension } from '../../obedience-types/scripts/types.js';
 
 // ---------------------------------------------------------------------------
 // Types

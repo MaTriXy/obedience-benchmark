@@ -20,7 +20,7 @@ import type {
   CatalogEntry,
   CatalogFilter,
   ObedienceDimension,
-} from '../obedience-types/scripts/types.js';
+} from '../../obedience-types/scripts/types.js';
 
 // ---------------------------------------------------------------------------
 // Additional types exported by this module

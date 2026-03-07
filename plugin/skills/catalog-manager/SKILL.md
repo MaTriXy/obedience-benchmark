@@ -53,8 +53,8 @@ Browse, search, filter, and validate the benchmark task catalog. The catalog liv
 
 ## Key Files
 
-- `skills/catalog-manager/catalog.ts` -- core catalog logic
-- `skills/catalog-manager/catalog.test.ts` -- unit tests
+- `skills/catalog-manager/scripts/catalog.ts` -- core catalog logic
+- `skills/catalog-manager/scripts/catalog.test.ts` -- unit tests
 - `skills/obedience-types/scripts/schemas/task-definition.schema.json` -- JSON Schema for task.yaml
 - `skills/obedience-types/scripts/types.ts` -- `CatalogEntry`, `CatalogFilter`, `TaskSelection` types
 - `skills/catalog-manager/benchmarks/` -- the task catalog directory tree

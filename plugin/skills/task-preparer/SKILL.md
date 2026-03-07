@@ -63,10 +63,10 @@ via the `generatorRef` field in the input spec.
 
 ## Key Files
 
-- `skills/task-preparer/preparer.ts` -- core preparation logic
-- `skills/task-preparer/generators/text-generator.ts` -- synthetic text generation
-- `skills/task-preparer/generators/code-generator.ts` -- mock codebase generation
-- `skills/task-preparer/generators/data-generator.ts` -- dataset / numeric generation
+- `skills/task-preparer/scripts/preparer.ts` -- core preparation logic
+- `skills/task-preparer/scripts/generators/text-generator.ts` -- synthetic text generation
+- `skills/task-preparer/scripts/generators/code-generator.ts` -- mock codebase generation
+- `skills/task-preparer/scripts/generators/data-generator.ts` -- dataset / numeric generation
 - `skills/obedience-types/scripts/types.ts` -- `PreparedTask`, `CatalogEntry` types
 - `skills/obedience-types/scripts/schemas/task-definition.schema.json` -- task YAML schema (InputSpec definition)
 

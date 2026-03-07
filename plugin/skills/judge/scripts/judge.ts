@@ -18,10 +18,10 @@ import type {
   ObedienceScorecard,
   DimensionScore,
   Deduction,
-} from '../obedience-types/scripts/types.js';
+} from '../../obedience-types/scripts/types.js';
 import { buildExecutionTrace } from './scripts/log-parser.js';
 import type { ExecutionTrace, ParallelGroup, LoopExecution } from './scripts/log-parser.js';
-import type { StructuredLog } from '../candidate-runner/scripts/log-collector.js';
+import type { StructuredLog } from '../../candidate-runner/scripts/log-collector.js';
 
 // ---------------------------------------------------------------------------
 // Constants
