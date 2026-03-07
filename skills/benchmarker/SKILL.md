@@ -60,7 +60,7 @@ State is persisted to `results/<run-id>/run-state.json` after each phase for cra
 
 ## Key Files
 
-- `shared/types.ts` -- `BenchmarkRun`, `BenchmarkRunStatus` types
+- `skills/common/scripts/types.ts` -- `BenchmarkRun`, `BenchmarkRunStatus` types
 - All other skill SKILL.md files (this skill orchestrates them all)
 
 ## Configuration Defaults

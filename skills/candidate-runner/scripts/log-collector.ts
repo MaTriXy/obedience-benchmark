@@ -7,7 +7,7 @@
  */
 
 import { writeFile } from 'node:fs/promises';
-import type { LogEvent, LogEventType } from './types.js';
+import type { LogEvent, LogEventType } from '../../common/scripts/types.js';
 
 // ---------------------------------------------------------------------------
 // Extended Event Types (superset of LogEventType for collector use)

@@ -22,7 +22,7 @@ judge, and returning a fully resolved `PreparedTask` object.
 
 ## Outputs
 
-A `PreparedTask` object (see `shared/types.ts`) containing:
+A `PreparedTask` object (see `skills/common/scripts/types.ts`) containing:
 
 - `catalogEntry` -- the original catalog entry
 - `inputDir` -- absolute path to the directory with materialized input artifacts
@@ -67,8 +67,8 @@ via the `generatorRef` field in the input spec.
 - `skills/task-preparer/generators/text-generator.ts` -- synthetic text generation
 - `skills/task-preparer/generators/code-generator.ts` -- mock codebase generation
 - `skills/task-preparer/generators/data-generator.ts` -- dataset / numeric generation
-- `shared/types.ts` -- `PreparedTask`, `CatalogEntry` types
-- `shared/schemas/task-definition.schema.json` -- task YAML schema (InputSpec definition)
+- `skills/common/scripts/types.ts` -- `PreparedTask`, `CatalogEntry` types
+- `skills/common/scripts/schemas/task-definition.schema.json` -- task YAML schema (InputSpec definition)
 
 ## Notes
 

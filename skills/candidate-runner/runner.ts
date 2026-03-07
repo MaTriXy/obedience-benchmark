@@ -15,8 +15,8 @@ import type {
   RunnerConfig,
   RunnerMode,
   RunnerResult,
-} from '../../shared/runner-interface.js';
-import type { PreparedTask } from '../../shared/types.js';
+} from './scripts/runner-interface.js';
+import type { PreparedTask } from '../common/scripts/types.js';
 import { LocalRunner } from './local-runner.js';
 import { DockerRunner } from './docker-runner.js';
 
@@ -71,7 +71,7 @@ export interface RunCandidateResult {
  * Only returns variables relevant to the specified harness to prevent leakage.
  */
 export function resolveHarnessCredentials(
-  harness: import('../../shared/runner-interface.js').AgentHarness,
+  harness: import('./scripts/runner-interface.js').AgentHarness,
 ): Record<string, string> {
   const env: Record<string, string> = {};
 

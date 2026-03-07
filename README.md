@@ -57,21 +57,21 @@ Use the `benchmarker` skill to run a full suite:
 
 ```
 obedience-benchmark/
+├── plugin.json              # Plugin manifest (skills registry, metadata)
 ├── .claude-plugin/
-│   ├── plugin.json          # Claude Code plugin manifest
+│   ├── plugin.json          # Claude Code marketplace metadata
 │   └── marketplace.json     # Marketplace manifest for this repo
 ├── package.json             # Node.js project
-├── shared/                  # Shared types and utilities
-│   ├── types.ts             # All type definitions
-│   ├── process-helpers.js   # ProcessContext API for task process files
-│   ├── log-collector.ts     # Structured event capture
-│   ├── log-parser.ts        # Execution trace reconstruction
-│   ├── runner-interface.ts  # Runner abstraction layer
-│   └── schemas/             # JSON Schema files
-│       └── task-definition.schema.json
-├── skills/                  # Plugin skills (auto-discovered)
+├── skills/                  # Plugin skills (registered in plugin.json)
+│   ├── common/              # Shared types and utilities
+│   │   └── scripts/
+│   │       ├── types.ts             # All type definitions
+│   │       ├── process-helpers.js   # ProcessContext API for task process files
+│   │       └── schemas/
+│   │           └── task-definition.schema.json
 │   ├── catalog-manager/     # Browse and filter task catalog
-│   │   └── benchmarks/      # Task catalog (under catalog-manager per spec)
+│   │   ├── catalog.ts
+│   │   └── benchmarks/      # Task catalog
 │   │       ├── smoke/       # Simple smoke tests
 │   │       │   ├── hello-world/
 │   │       │   ├── parallel-sum/
@@ -84,11 +84,18 @@ obedience-benchmark/
 │   │           ├── tsp-genetic-algorithm/
 │   │           ├── markdown-readability/
 │   │           └── crossword-puzzle/
+│   ├── candidate-runner/    # Execute candidate agents
+│   │   ├── runner.ts
+│   │   └── scripts/
+│   │       ├── runner-interface.ts  # Runner abstraction types
+│   │       └── log-collector.ts     # Structured event capture
+│   ├── judge/               # Score obedience across 7 dimensions
+│   │   ├── judge.ts
+│   │   └── scripts/
+│   │       └── log-parser.ts        # Execution trace reconstruction
+│   ├── report-generator/    # Compile reports and leaderboards
 │   ├── task-creator/        # Author new benchmark tasks
 │   ├── task-preparer/       # Generate input data and artifacts
-│   ├── candidate-runner/    # Execute candidate agents
-│   ├── judge/               # Score obedience across 7 dimensions
-│   ├── report-generator/    # Compile reports and leaderboards
 │   └── benchmarker/         # Top-level orchestrator
 └── results/                 # Benchmark run results (gitignored)
 ```

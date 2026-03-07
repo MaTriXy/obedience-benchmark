@@ -1,0 +1,23 @@
+{
+  "name": "obedience-benchmark",
+  "version": "0.1.0",
+  "description": "Benchmark plugin for measuring AI agent obedience to prescribed processes. Tests whether agents follow specific procedural instructions across 7 dimensions: completeness, ordering, conditionality, parallelism, granularity, aggregation, and error handling.",
+  "author": "obedience-benchmark",
+  "license": "MIT",
+  "skills": [
+    { "name": "benchmarker", "file": "skills/benchmarker/SKILL.md" },
+    { "name": "catalog-manager", "file": "skills/catalog-manager/SKILL.md" },
+    { "name": "candidate-runner", "file": "skills/candidate-runner/SKILL.md" },
+    { "name": "common", "file": "skills/common/SKILL.md" },
+    { "name": "judge", "file": "skills/judge/SKILL.md" },
+    { "name": "report-generator", "file": "skills/report-generator/SKILL.md" },
+    { "name": "task-creator", "file": "skills/task-creator/SKILL.md" },
+    { "name": "task-preparer", "file": "skills/task-preparer/SKILL.md" }
+  ],
+  "keywords": [
+    "benchmark",
+    "obedience",
+    "agent-testing",
+    "process-fidelity"
+  ]
+}

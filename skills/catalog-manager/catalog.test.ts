@@ -19,7 +19,7 @@ import {
   resetSchemaCache,
 } from './catalog.js';
 
-import type { CatalogEntry, CatalogFilter, ObedienceDimension } from '../../shared/types.js';
+import type { CatalogEntry, CatalogFilter, ObedienceDimension } from '../common/scripts/types.js';
 
 // ---------------------------------------------------------------------------
 // Helpers — temporary task fixtures
@@ -27,7 +27,7 @@ import type { CatalogEntry, CatalogFilter, ObedienceDimension } from '../../shar
 
 const SCHEMA_PATH = path.resolve(
   path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')),
-  '../../shared/schemas/task-definition.schema.json',
+  '../common/scripts/schemas/task-definition.schema.json',
 );
 
 /** Create a temporary task directory with valid metadata and process file. */

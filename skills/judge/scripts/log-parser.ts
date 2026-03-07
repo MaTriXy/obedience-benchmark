@@ -7,8 +7,8 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import type { LogEvent, ParsedSessionLog, ObservedStep } from './types.js';
-import type { StructuredLog } from './log-collector.js';
+import type { LogEvent, ParsedSessionLog, ObservedStep } from '../../common/scripts/types.js';
+import type { StructuredLog } from '../../candidate-runner/scripts/log-collector.js';
 
 // ---------------------------------------------------------------------------
 // Parallel & Loop analysis types

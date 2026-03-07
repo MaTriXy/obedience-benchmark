@@ -19,8 +19,8 @@ import type {
   ObedienceScorecard,
   BenchmarkReport,
   ObedienceDimension,
-} from '../../shared/types.js';
-import { ALL_DIMENSIONS } from '../../shared/types.js';
+} from '../common/scripts/types.js';
+import { ALL_DIMENSIONS } from '../common/scripts/types.js';
 
 import type {
   RunnerConfig,
@@ -29,7 +29,7 @@ import type {
   RunnerStatus,
   AgentHarness,
   Runner,
-} from '../../shared/runner-interface.js';
+} from '../candidate-runner/scripts/runner-interface.js';
 
 // ---------------------------------------------------------------------------
 // Skill imports (resilient -- may not all exist yet)

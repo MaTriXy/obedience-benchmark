@@ -12,8 +12,8 @@ import type {
   BenchmarkReport,
   Leaderboard,
   LeaderboardEntry,
-} from '../../shared/types.js';
-import { ALL_DIMENSIONS } from '../../shared/types.js';
+} from '../common/scripts/types.js';
+import { ALL_DIMENSIONS } from '../common/scripts/types.js';
 
 // ---------------------------------------------------------------------------
 // Public interface

@@ -22,8 +22,8 @@ import type {
   LogLine,
   ResourceLimits,
   NetworkPolicy,
-} from '../../shared/runner-interface.js';
-import { LogCollector } from '../../shared/log-collector.js';
+} from './scripts/runner-interface.js';
+import { LogCollector } from './scripts/log-collector.js';
 import { collectArtifacts } from './runner.js';
 
 const execFileAsync = promisify(execFile);

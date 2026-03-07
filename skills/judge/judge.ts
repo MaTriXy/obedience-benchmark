@@ -18,11 +18,11 @@ import type {
   ObedienceScorecard,
   DimensionScore,
   Deduction,
-} from '../../shared/types.js';
-import { traceProcess } from '../../shared/process-helpers.js';
-import { buildExecutionTrace } from '../../shared/log-parser.js';
-import type { ExecutionTrace, ParallelGroup, LoopExecution } from '../../shared/log-parser.js';
-import type { StructuredLog } from '../../shared/log-collector.js';
+} from '../common/scripts/types.js';
+import { traceProcess } from '../common/scripts/process-helpers.js';
+import { buildExecutionTrace } from './scripts/log-parser.js';
+import type { ExecutionTrace, ParallelGroup, LoopExecution } from './scripts/log-parser.js';
+import type { StructuredLog } from '../candidate-runner/scripts/log-collector.js';
 
 // ---------------------------------------------------------------------------
 // Constants

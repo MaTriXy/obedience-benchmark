@@ -41,4 +41,4 @@ Compile judge scorecards from one or more benchmark runs into human-readable rep
 
 ## Key Files
 
-- `shared/types.ts` -- `BenchmarkReport`, `Leaderboard`, `LeaderboardEntry` types
+- `skills/common/scripts/types.ts` -- `BenchmarkReport`, `Leaderboard`, `LeaderboardEntry` types

@@ -56,7 +56,7 @@ For each of the 7 dimensions, using the evaluation criteria from `task.yaml` and
 
 ## Output
 
-An `ObedienceScorecard` object (see `shared/types.ts`) containing:
+An `ObedienceScorecard` object (see `skills/common/scripts/types.ts`) containing:
 - Per-dimension scores with evidence and deductions
 - Weighted and raw overall scores
 - The prescribed trace and observed steps for auditability
@@ -64,9 +64,9 @@ An `ObedienceScorecard` object (see `shared/types.ts`) containing:
 
 ## Key Files
 
-- `shared/process-helpers.js` -- `traceProcess()`, `ProcessContext`
-- `shared/types.ts` -- `ObedienceScorecard`, `DimensionScore`, `ObservedStep`, `ProcessTrace`
-- `shared/schemas/task-definition.schema.json` -- evaluation criteria schema
+- `skills/common/scripts/process-helpers.js` -- `traceProcess()`, `ProcessContext`
+- `skills/common/scripts/types.ts` -- `ObedienceScorecard`, `DimensionScore`, `ObservedStep`, `ProcessTrace`
+- `skills/common/scripts/schemas/task-definition.schema.json` -- evaluation criteria schema
 
 ## Scoring Principles
 

@@ -57,7 +57,7 @@ example use-case, and exercised dimensions.
 ### Validating a Task (`action: validate`)
 
 1. Check `metadata.yaml` exists and parses as valid YAML
-2. Validate against `shared/schemas/task-definition.schema.json`
+2. Validate against `skills/common/scripts/schemas/task-definition.schema.json`
 3. Check `processRef` points to an existing `*.process.js` file
 4. Verify that `metadata.name` follows the naming pattern
 5. Check that dimension weights are reasonable (each 0-1)
@@ -78,9 +78,9 @@ example use-case, and exercised dimensions.
 | `skills/task-creator/templates/map-reduce.template.js` | Parallel fan-out/fan-in template |
 | `skills/task-creator/templates/iterative.template.js` | Loop with convergence template |
 | `skills/task-creator/templates/conditional.template.js` | Branching with rollback template |
-| `shared/schemas/task-definition.schema.json` | JSON Schema for metadata.yaml validation |
-| `shared/process-helpers.js` | `ProcessContext` API and `traceProcess()` |
-| `shared/types.ts` | TypeScript type definitions |
+| `skills/common/scripts/schemas/task-definition.schema.json` | JSON Schema for metadata.yaml validation |
+| `skills/common/scripts/process-helpers.js` | `ProcessContext` API and `traceProcess()` |
+| `skills/common/scripts/types.ts` | TypeScript type definitions |
 
 ## Example Usage
 

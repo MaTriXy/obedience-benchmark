@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
 
-import type { CatalogEntry, PreparedTask } from '../../shared/types.js';
+import type { CatalogEntry, PreparedTask } from '../common/scripts/types.js';
 
 import {
   generateBook,

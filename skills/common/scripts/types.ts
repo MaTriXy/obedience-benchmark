@@ -477,7 +477,7 @@ export interface BenchmarkRun {
   /** Per-task preparation state. */
   preparedTasks: Record<string, PreparedTask>;
   /** Per-task runner results. */
-  runnerResults: Record<string, import('./runner-interface.js').RunnerResult>;
+  runnerResults: Record<string, import('../../candidate-runner/scripts/runner-interface.js').RunnerResult>;
   /** Per-task scorecards. */
   scorecards: Record<string, ObedienceScorecard>;
   /** Aggregate results (populated after judging). */

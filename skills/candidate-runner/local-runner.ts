@@ -20,8 +20,8 @@ import type {
   RunnerEvent,
   LogLine,
   AgentHarness,
-} from '../../shared/runner-interface.js';
-import { LogCollector } from '../../shared/log-collector.js';
+} from './scripts/runner-interface.js';
+import { LogCollector } from './scripts/log-collector.js';
 import { collectArtifacts, resolveHarnessCredentials } from './runner.js';
 
 // ---------------------------------------------------------------------------

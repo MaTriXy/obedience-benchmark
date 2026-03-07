@@ -16,7 +16,7 @@
 
 // @ts-check
 
-/** @type {import('../../../shared/types.js').ProcessMetadata} */
+/** @type {import('../../common/scripts/types.js').ProcessMetadata} */
 export const metadata = {
   name: '{{TASK_NAME}}',
   domain: '{{DOMAIN}}',
@@ -32,7 +32,7 @@ export const metadata = {
  * {{DESCRIPTION}}
  *
  * @param {unknown} input - Task input data
- * @param {import('../../../shared/types.js').ProcessContext} ctx - Process context
+ * @param {import('../../common/scripts/types.js').ProcessContext} ctx - Process context
  * @returns {Promise<unknown>}
  */
 export async function prescribedProcess(input, ctx) {
@@ -108,7 +108,7 @@ export async function prescribedProcess(input, ctx) {
   return { postProcessed, finalValidation };
 }
 
-/** @type {import('../../../shared/types.js').ProcessEvaluation} */
+/** @type {import('../../common/scripts/types.js').ProcessEvaluation} */
 export const evaluation = {
   completeness: {
     weight: 0.2,

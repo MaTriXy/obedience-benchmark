@@ -41,7 +41,7 @@ Both backends implement the shared `Runner` interface and produce identical `Run
 
 ## Output
 
-A `RunnerResult` object (see `shared/runner-interface.ts`) containing:
+A `RunnerResult` object (see `scripts/runner-interface.ts`) containing:
 - Exit code and terminal status (`completed`, `timeout`, `error`, `cancelled`)
 - Wall-clock duration in milliseconds
 - Structured `RunnerEvent[]` and raw `LogLine[]`
@@ -57,9 +57,9 @@ A `RunnerResult` object (see `shared/runner-interface.ts`) containing:
 | `local-runner.ts` | `LocalRunner` -- subprocess-based execution backend |
 | `docker-runner.ts` | `DockerRunner` -- container-based execution backend |
 | `Dockerfile.template` | Base Dockerfile used to build candidate agent images |
-| `shared/runner-interface.ts` | `Runner`, `RunnerConfig`, `RunnerResult` type definitions |
-| `shared/log-collector.ts` | `LogCollector` class for structured event capture |
-| `shared/types.ts` | Shared types (`PreparedTask`, `LogEvent`, etc.) |
+| `scripts/runner-interface.ts` | `Runner`, `RunnerConfig`, `RunnerResult` type definitions |
+| `scripts/log-collector.ts` | `LogCollector` class for structured event capture |
+| `../common/scripts/types.ts` | Shared types (`PreparedTask`, `LogEvent`, etc.) |
 
 ## Supported Harnesses
 

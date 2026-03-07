@@ -11,7 +11,7 @@
  *
  * Usage in a process file:
  *
- *   import { createProcessContext } from '../../shared/process-helpers.js';
+ *   import { createProcessContext } from '../../common/scripts/process-helpers.js';
  *
  *   export async function prescribedProcess(input, ctx) {
  *     const result = await ctx.step('analyze', {
