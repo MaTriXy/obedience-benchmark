@@ -57,46 +57,47 @@ Use the `benchmarker` skill to run a full suite:
 
 ```
 obedience-benchmark/
-├── plugin.json              # Plugin manifest (skills registry, metadata)
 ├── .claude-plugin/
 │   ├── plugin.json          # Claude Code marketplace metadata
-│   └── marketplace.json     # Marketplace manifest for this repo
+│   └── marketplace.json     # Marketplace manifest (source: plugin/)
+├── plugin/                  # Plugin root (referenced by marketplace)
+│   ├── plugin.json          # Plugin manifest (skills registry, metadata)
+│   └── skills/              # Plugin skills (registered in plugin.json)
+│       ├── common/              # Shared types and utilities
+│       │   └── scripts/
+│       │       ├── types.ts             # All type definitions
+│       │       ├── process-helpers.js   # ProcessContext API for task process files
+│       │       └── schemas/
+│       │           └── task-definition.schema.json
+│       ├── catalog-manager/     # Browse and filter task catalog
+│       │   ├── catalog.ts
+│       │   └── benchmarks/      # Task catalog
+│       │       ├── smoke/       # Simple smoke tests
+│       │       │   ├── hello-world/
+│       │       │   ├── parallel-sum/
+│       │       │   └── conditional-skip/
+│       │       └── full/        # Full benchmark tasks
+│       │           ├── book-translation/
+│       │           ├── countries-cities-attractions/
+│       │           ├── circular-dependency-refactoring/
+│       │           ├── us-states-scraping/
+│       │           ├── tsp-genetic-algorithm/
+│       │           ├── markdown-readability/
+│       │           └── crossword-puzzle/
+│       ├── candidate-runner/    # Execute candidate agents
+│       │   ├── runner.ts
+│       │   └── scripts/
+│       │       ├── runner-interface.ts  # Runner abstraction types
+│       │       └── log-collector.ts     # Structured event capture
+│       ├── judge/               # Score obedience across 7 dimensions
+│       │   ├── judge.ts
+│       │   └── scripts/
+│       │       └── log-parser.ts        # Execution trace reconstruction
+│       ├── report-generator/    # Compile reports and leaderboards
+│       ├── task-creator/        # Author new benchmark tasks
+│       ├── task-preparer/       # Generate input data and artifacts
+│       └── benchmarker/         # Top-level orchestrator
 ├── package.json             # Node.js project
-├── skills/                  # Plugin skills (registered in plugin.json)
-│   ├── common/              # Shared types and utilities
-│   │   └── scripts/
-│   │       ├── types.ts             # All type definitions
-│   │       ├── process-helpers.js   # ProcessContext API for task process files
-│   │       └── schemas/
-│   │           └── task-definition.schema.json
-│   ├── catalog-manager/     # Browse and filter task catalog
-│   │   ├── catalog.ts
-│   │   └── benchmarks/      # Task catalog
-│   │       ├── smoke/       # Simple smoke tests
-│   │       │   ├── hello-world/
-│   │       │   ├── parallel-sum/
-│   │       │   └── conditional-skip/
-│   │       └── full/        # Full benchmark tasks
-│   │           ├── book-translation/
-│   │           ├── countries-cities-attractions/
-│   │           ├── circular-dependency-refactoring/
-│   │           ├── us-states-scraping/
-│   │           ├── tsp-genetic-algorithm/
-│   │           ├── markdown-readability/
-│   │           └── crossword-puzzle/
-│   ├── candidate-runner/    # Execute candidate agents
-│   │   ├── runner.ts
-│   │   └── scripts/
-│   │       ├── runner-interface.ts  # Runner abstraction types
-│   │       └── log-collector.ts     # Structured event capture
-│   ├── judge/               # Score obedience across 7 dimensions
-│   │   ├── judge.ts
-│   │   └── scripts/
-│   │       └── log-parser.ts        # Execution trace reconstruction
-│   ├── report-generator/    # Compile reports and leaderboards
-│   ├── task-creator/        # Author new benchmark tasks
-│   ├── task-preparer/       # Generate input data and artifacts
-│   └── benchmarker/         # Top-level orchestrator
 └── results/                 # Benchmark run results (gitignored)
 ```
 

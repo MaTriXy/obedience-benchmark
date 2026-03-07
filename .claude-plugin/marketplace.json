@@ -15,7 +15,7 @@
         "name": "obedience-benchmark",
         "email": "obedience-benchmark@example.com"
       },
-      "source": ".",
+      "source": "plugin",
       "category": "development",
       "homepage": "https://github.com/obedience-benchmark/obedience-benchmark",
       "tags": [
