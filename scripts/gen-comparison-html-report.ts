@@ -156,7 +156,7 @@ function toObedienceScorecard(card: any, weights: Record<ObedienceDimension, num
 // Build BenchmarkReport
 // ---------------------------------------------------------------------------
 
-function buildReport(sc: ObedienceScorecard, title: string, taskDef: TaskDef): BenchmarkReport {
+function buildReport(sc: ObedienceScorecard, title: string, taskDef: TaskDef, durationMs: number = 0): BenchmarkReport {
   const dimensionAnalysis = {} as BenchmarkReport['dimensionAnalysis'];
   for (const dim of ALL_DIMENSIONS) {
     const ds = sc.dimensions[dim];
@@ -187,7 +187,7 @@ function buildReport(sc: ObedienceScorecard, title: string, taskDef: TaskDef): B
       overallScore: Math.round(sc.weightedScore),
       tasksCompleted: 1,
       tasksFailed: 0,
-      totalDurationMs: 0,
+      totalDurationMs: durationMs,
       strongestDimension,
       weakestDimension,
     },
@@ -234,6 +234,10 @@ for (const taskReg of TASKS) {
   const pureClaudeCard = JSON.parse(readFileSync(pcCardPath, 'utf-8'));
   const babysitterCard = JSON.parse(readFileSync(bsCardPath, 'utf-8'));
 
+  // Read timing data from scorecards (populated by judge)
+  const babysitterDurationMs: number = babysitterCard.durationMs ?? 0;
+  const pureClaudeDurationMs: number = pureClaudeCard.durationMs ?? 0;
+
   // Load agent outputs for comparison display
   let pureClaudeOutput: unknown = null;
   let babysitterOutput: unknown = null;
@@ -245,8 +249,8 @@ for (const taskReg of TASKS) {
   const babysitterSc = toObedienceScorecard(babysitterCard, taskDef.weights);
 
   // Build reports
-  const pureClaudeReport = buildReport(pureClaudeSc, `Pure Claude Code — ${taskDef.name}`, taskDef);
-  const babysitterReport = buildReport(babysitterSc, `Babysitter-Style — ${taskDef.name}`, taskDef);
+  const pureClaudeReport = buildReport(pureClaudeSc, `Pure Claude Code — ${taskDef.name}`, taskDef, pureClaudeDurationMs);
+  const babysitterReport = buildReport(babysitterSc, `Babysitter-Style — ${taskDef.name}`, taskDef, babysitterDurationMs);
 
   // Build rich HTML options from task definition
   const reportOptions: HtmlReportOptions = {

@@ -20,8 +20,8 @@ Side-by-side analysis of two agents' performance on a single task:
 - Dimension score bars (only applicable dimensions, N/A dimensions hidden)
 - Judge evidence per dimension with pass/fail per check for both agents
 - Agent output JSON snippets with structural diff analysis
-- Head-to-head comparison table (applicable dimensions only)
-- Leaderboard ranking
+- Head-to-head comparison table (applicable dimensions only, plus time taken row)
+- Leaderboard ranking with time taken per agent
 
 ### Individual Report (per-agent)
 Single agent's performance on a task with the same sections minus comparison.
@@ -81,3 +81,11 @@ npx tsx scripts/gen-comparison-html-report.ts
 ```
 
 Requires judge scorecards at `results/full-comparison/<agent>/scorecard.json` (produced by `scripts/judge-outputs.ts`).
+
+## Time Taken
+
+Duration data flows through the pipeline:
+1. Each agent stores timing in `results/full-comparison/<agent>/timing.json` with `{ durationMs: number }`
+2. `judge-outputs.ts` reads timing and writes `durationMs` into each scorecard
+3. `gen-comparison-html-report.ts` passes duration into `BenchmarkReport.summary.totalDurationMs`
+4. The HTML report displays time taken in: overall score stats, head-to-head comparison table (with % faster/slower), and leaderboard

@@ -37,6 +37,7 @@ interface JudgeScorecardOutput {
   taskName: string;
   agentId: string;
   weightedScore: number;
+  durationMs?: number;
   dimensions: Record<string, {
     score: number;
     evidence: string;
@@ -112,11 +113,12 @@ interface AgentConfig {
   id: string;
   label: string;
   outputPath: string;
+  timingPath?: string;
 }
 
 const agents: AgentConfig[] = [
-  { id: 'babysitter-orchestrated', label: 'Babysitter', outputPath: 'results/full-comparison/babysitter/output/report.json' },
-  { id: 'pure-claude-code', label: 'Pure Claude', outputPath: 'results/full-comparison/pure-claude/output/report.json' },
+  { id: 'babysitter-orchestrated', label: 'Babysitter', outputPath: 'results/full-comparison/babysitter/output/report.json', timingPath: 'results/full-comparison/babysitter/timing.json' },
+  { id: 'pure-claude-code', label: 'Pure Claude', outputPath: 'results/full-comparison/pure-claude/output/report.json', timingPath: 'results/full-comparison/pure-claude/timing.json' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -658,11 +660,24 @@ for (const agent of agents) {
 
   console.log(`\n  WEIGHTED SCORE: ${weightedScore}/100`);
 
+  // Read timing data if available
+  let durationMs: number | undefined;
+  if (agent.timingPath) {
+    try {
+      const timing = JSON.parse(readFileSync(agent.timingPath, 'utf-8'));
+      durationMs = timing.durationMs;
+      console.log(`  Duration: ${(durationMs! / 1000).toFixed(1)}s (${(durationMs! / 60000).toFixed(1)}m)`);
+    } catch {
+      // timing.json not found — leave undefined
+    }
+  }
+
   // Write scorecard
   const scorecard: JudgeScorecardOutput = {
     taskName: taskYaml.metadata.name,
     agentId: agent.id,
     weightedScore,
+    durationMs,
     dimensions: {},
   };
 

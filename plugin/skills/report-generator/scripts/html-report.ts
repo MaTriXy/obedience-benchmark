@@ -18,6 +18,7 @@ import type {
   BenchmarkReport,
 } from '../../obedience-types/scripts/types.js';
 import { ALL_DIMENSIONS } from '../../obedience-types/scripts/types.js';
+import { getThemeCSS } from './theme-registry.js';
 
 // ---------------------------------------------------------------------------
 // Public API — Options
@@ -304,6 +305,7 @@ function renderOverallScore(report: BenchmarkReport, compare?: BenchmarkReport):
         <div class="score-stats">
           <div class="stat"><span class="stat-val">${report.summary.tasksCompleted}</span><span class="stat-label">COMPLETED</span></div>
           <div class="stat"><span class="stat-val">${report.summary.tasksFailed}</span><span class="stat-label">FAILED</span></div>
+          <div class="stat"><span class="stat-val">${formatDuration(report.summary.totalDurationMs)}</span><span class="stat-label">TIME TAKEN</span></div>
           <div class="stat"><span class="stat-val">${formatDim(report.summary.strongestDimension)}</span><span class="stat-label">STRONGEST</span></div>
           <div class="stat"><span class="stat-val">${formatDim(report.summary.weakestDimension)}</span><span class="stat-label">WEAKEST</span></div>
         </div>
@@ -747,6 +749,18 @@ function renderComparisonTable(report: BenchmarkReport, compare: BenchmarkReport
     </tr>`;
   }).join('');
 
+  // Time taken row
+  const primaryTime = report.summary.totalDurationMs;
+  const baselineTime = compare.summary.totalDurationMs;
+  const timeRow = (primaryTime > 0 || baselineTime > 0) ? `<tr class="time-row">
+      <td>TIME TAKEN</td>
+      <td>${formatDuration(primaryTime)}</td>
+      <td>${formatDuration(baselineTime)}</td>
+      <td class="delta ${primaryTime <= baselineTime ? 'positive' : 'negative'}">${primaryTime > 0 && baselineTime > 0 ? (primaryTime < baselineTime ? `${((1 - primaryTime / baselineTime) * 100).toFixed(0)}% faster` : `${((primaryTime / baselineTime - 1) * 100).toFixed(0)}% slower`) : ''}</td>
+      <td class="evidence-cell"></td>
+      <td class="evidence-cell"></td>
+    </tr>` : '';
+
   return `
   <section class="panel fade-in" data-delay="1000">
     <div class="frame">
@@ -763,7 +777,7 @@ function renderComparisonTable(report: BenchmarkReport, compare: BenchmarkReport
             <th>Primary Notes</th>
             <th>Baseline Notes</th>
           </tr></thead>
-          <tbody>${rows}</tbody>
+          <tbody>${rows}${timeRow}</tbody>
         </table>
       </div>
     </div>
@@ -775,11 +789,12 @@ function renderComparisonTable(report: BenchmarkReport, compare: BenchmarkReport
 // ---------------------------------------------------------------------------
 
 function renderLeaderboard(report: BenchmarkReport, compare?: BenchmarkReport): string {
-  const entries: { agentId: string; score: number; strongest: ObedienceDimension; weakest: ObedienceDimension; isCurrent: boolean }[] = [];
+  const entries: { agentId: string; score: number; durationMs: number; strongest: ObedienceDimension; weakest: ObedienceDimension; isCurrent: boolean }[] = [];
 
   entries.push({
     agentId: report.agentId,
     score: report.summary.overallScore,
+    durationMs: report.summary.totalDurationMs,
     strongest: report.summary.strongestDimension,
     weakest: report.summary.weakestDimension,
     isCurrent: true,
@@ -789,6 +804,7 @@ function renderLeaderboard(report: BenchmarkReport, compare?: BenchmarkReport): 
     entries.push({
       agentId: compare.agentId,
       score: compare.summary.overallScore,
+      durationMs: compare.summary.totalDurationMs,
       strongest: compare.summary.strongestDimension,
       weakest: compare.summary.weakestDimension,
       isCurrent: false,
@@ -802,6 +818,7 @@ function renderLeaderboard(report: BenchmarkReport, compare?: BenchmarkReport): 
       <td>${i + 1}</td>
       <td>${esc(e.agentId)}</td>
       <td class="${scoreClass(e.score)}">${e.score}</td>
+      <td>${formatDuration(e.durationMs)}</td>
       <td>${formatDim(e.strongest)}</td>
       <td>${formatDim(e.weakest)}</td>
     </tr>`).join('');
@@ -814,7 +831,7 @@ function renderLeaderboard(report: BenchmarkReport, compare?: BenchmarkReport): 
       <h2 class="panel-title">LEADERBOARD</h2>
       <div class="panel-content">
         <table class="leaderboard-table">
-          <thead><tr><th>#</th><th>Agent</th><th>Score</th><th>Best</th><th>Worst</th></tr></thead>
+          <thead><tr><th>#</th><th>Agent</th><th>Score</th><th>Time</th><th>Best</th><th>Worst</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
@@ -878,6 +895,18 @@ function scoreClass(score: number): string {
   return 'score-poor';
 }
 
+function formatDuration(ms: number): string {
+  if (ms <= 0) return 'N/A';
+  const totalSec = Math.round(ms / 1000);
+  if (totalSec < 60) return `${totalSec}s`;
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  if (min < 60) return sec > 0 ? `${min}m ${sec}s` : `${min}m`;
+  const hr = Math.floor(min / 60);
+  const remMin = min % 60;
+  return remMin > 0 ? `${hr}h ${remMin}m` : `${hr}h`;
+}
+
 /** Truncate a JSON object to at most `maxLines` lines for display */
 function truncateJson(obj: unknown, maxLines: number): string {
   const full = JSON.stringify(obj, null, 2);
@@ -930,23 +959,7 @@ function compareStructure(primary: unknown, baseline: unknown): string {
 // ---------------------------------------------------------------------------
 
 const CSS = `<style>
-@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
-
-:root {
-  --bg: #020810;
-  --bg2: #061018;
-  --cyan: #00f0ff;
-  --cyan-dim: rgba(0,240,255,0.15);
-  --cyan-glow: rgba(0,240,255,0.4);
-  --teal: #00d4aa;
-  --magenta: #ff00aa;
-  --amber: #ffbb00;
-  --red: #ff3355;
-  --text: #b0d4e8;
-  --text-bright: #e0f4ff;
-  --mono: 'Share Tech Mono', monospace;
-  --display: 'Orbitron', sans-serif;
-}
+${getThemeCSS()}
 
 * { margin:0; padding:0; box-sizing:border-box; }
 
@@ -1230,6 +1243,8 @@ h1 {
 .compare-table-wide .evidence-cell { text-align: left; font-size: 0.65rem; max-width: 200px; color: var(--text); opacity: 0.7; }
 .compare-table a { color: var(--cyan); text-decoration: none; }
 .compare-table a:hover { text-decoration: underline; }
+.compare-table .time-row td { border-top: 1px solid var(--cyan-dim); font-style: italic; color: var(--cyan); }
+.compare-table .time-row td:first-child { font-weight: bold; letter-spacing: 1px; }
 
 /* Index cards */
 .index-card { display: block; text-decoration: none; color: inherit; }
