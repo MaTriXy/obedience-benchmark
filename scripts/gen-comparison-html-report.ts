@@ -43,6 +43,16 @@ const TASKS: TaskRegistry[] = [
     yamlPath: 'plugin/skills/catalog-manager/benchmarks/full/countries-cities-attractions/task.yaml',
     resultsDir: 'results/full-comparison',
   },
+  {
+    taskName: 'crossword-puzzle',
+    yamlPath: 'plugin/skills/catalog-manager/benchmarks/full/crossword-puzzle/task.yaml',
+    resultsDir: 'results/full-comparison/crossword-puzzle',
+  },
+  {
+    taskName: 'book-translation',
+    yamlPath: 'plugin/skills/catalog-manager/benchmarks/full/book-translation/task.yaml',
+    resultsDir: 'results/full-comparison/book-translation',
+  },
 ];
 
 // ---------------------------------------------------------------------------

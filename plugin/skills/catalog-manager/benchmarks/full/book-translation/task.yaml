@@ -1,61 +1,79 @@
-name: book-translation
-domain: translation
-complexity: high
-estimatedDuration: "30m"
+version: "1.0"
+
+metadata:
+  name: book-translation
+  domain: translation
+  complexity: high
+  estimatedDuration: "30m"
+  tags:
+    - full
+    - map-reduce
+    - translation
+    - parallel
+    - nested-loop
+
 description: >
   Map-reduce translation pipeline. The agent must split a book into chapters
   and chunks, analyze book-level and chapter-level context (style, tone,
   terminology), translate all chunks in parallel with context awareness,
   combine the translated chunks, perform a cross-chunk/cross-chapter
   consistency check, and produce the final translated book.
-  Tests completeness, ordering, parallelism, granularity, and aggregation.
 
-tags:
-  - full
-  - map-reduce
-  - translation
-  - parallel
-  - nested-loop
-
-dimensions:
-  - completeness
-  - ordering
-  - parallelism
-  - granularity
-  - aggregation
+processRef: ./book-translation.process.js
 
 evaluation:
-  completeness:
-    weight: 25
-    criteria: >
-      Agent must execute every stage: read book, split chapters, analyze
-      book-level context, analyze per-chapter context, translate every chunk,
-      combine translations, run consistency check, and produce final output.
-  ordering:
-    weight: 20
-    criteria: >
-      Context analysis must precede translation. Chunk translations must
-      precede combination. Combination must precede the consistency check.
-  conditionality:
-    weight: 0
-    notApplicable: "No conditional branches in this task"
-  parallelism:
-    weight: 20
-    criteria: >
-      Chunks within the same chapter must be translated in parallel, not
-      sequentially. The parallel call should contain all chunks of a chapter.
-  granularity:
-    weight: 20
-    criteria: >
-      The book must be split into chapters, and each chapter into chunks.
-      Every chunk must be individually translated with iteration metadata
-      (chapter index, chunk index).
-  aggregation:
-    weight: 15
-    criteria: >
-      All translated chunks must be recombined into a single coherent book.
-      The consistency check must compare terminology and style across all
-      chapters.
-  errorHandling:
-    weight: 0
-    notApplicable: "No explicit error handling required"
+  dimensions:
+    completeness:
+      weight: 0.25
+      checks:
+        - "Read book step executed"
+        - "Book split into chapters"
+        - "Book-level context analyzed (style, tone, glossary, character names)"
+        - "Per-chapter context analyzed for all chapters"
+        - "Every chunk translated"
+        - "Translations combined into single book"
+        - "Consistency check performed"
+        - "Final output produced"
+    ordering:
+      weight: 0.20
+      checks:
+        - "Context analysis precedes translation"
+        - "Split chunks before translate"
+        - "Translation precedes combination"
+        - "Combination precedes consistency check"
+        - "Consistency check precedes final output"
+    conditionality:
+      weight: 0
+      notApplicable: true
+    parallelism:
+      weight: 0.20
+      checks:
+        - "Chunks within each chapter translated in parallel"
+        - "All chunks marked as parallel execution"
+        - "Both book and chapter context used during translation"
+        - "Chapters split into appropriately-sized chunks"
+    granularity:
+      weight: 0.20
+      checks:
+        - "Book split into distinct chapters"
+        - "Each chapter split into chunks"
+        - "Chunks have chapter/chunk index metadata"
+        - "Chunk-level translation (not whole-chapter)"
+        - "Per-chapter context is unique per chapter"
+    aggregation:
+      weight: 0.15
+      checks:
+        - "All chunks recombined into complete book"
+        - "Chapter boundaries preserved in combined text"
+        - "Consistency check covers glossary terms"
+        - "Consistency check covers all chapters"
+        - "Character name consistency verified"
+    errorHandling:
+      weight: 0
+      notApplicable: true
+
+  scoringNotes: >
+    Process fidelity is the primary metric. Key differentiators: parallel vs
+    sequential chunk translation, presence of chapter-level context analysis,
+    and cross-chapter consistency checking. A model that follows the full
+    map-reduce pattern scores higher than one that translates linearly.
