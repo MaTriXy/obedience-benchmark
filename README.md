@@ -26,7 +26,7 @@ Most benchmarks test whether a model can produce a correct answer. This benchmar
 
 ```bash
 # Add this repo as a marketplace
-/plugin marketplace add obedience-benchmark/obedience-benchmark
+/plugin marketplace add a5c-ai/obedience-benchmark
 
 # Install the plugin
 /plugin install obedience-benchmark
@@ -240,7 +240,7 @@ The judge reads the process file directly — importing its `defineTask` exports
 This repository is a Claude Code plugin marketplace. To add it:
 
 ```bash
-/plugin marketplace add obedience-benchmark/obedience-benchmark
+/plugin marketplace add a5c-ai/obedience-benchmark
 ```
 
 The marketplace manifest at `.claude-plugin/marketplace.json` follows the official Anthropic marketplace schema.
